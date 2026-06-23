@@ -182,6 +182,7 @@ arena_test2() {
     if(results && results[1]) { *results[1] = 1; }
 
     fib = [&](int N) -> int {
+        if(N >= CAPACITY) return std::numeric_limits<decltype(N)>::max(); // infinity!
         if(N == 0) return 0;
         if(N == 1) return 1;
         if(!results) return fib(N - 1) + fib(N - 2);

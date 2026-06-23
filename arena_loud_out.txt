@@ -1,0 +1,9 @@
+arena_loud(1024, arena_loud_out.txt);
+allocate<NSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE>(1); // allocates 32 bytes
+	used: 32; left: 992;
+reset();
+	used: 32; left: 992;
+	used: 0; left: 1024;
+allocate<NSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE>(1); // allocates 32 bytes
+	used: 32; left: 992;
+~arena_loud()

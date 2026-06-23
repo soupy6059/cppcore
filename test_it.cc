@@ -209,11 +209,14 @@ arena_test2() {
     );
 }
 
+template<typename T>
+using no_op_t = decltype([](T){});
+
 void arena_loud_test() {
     auto arena1 = core::arena_loud<core::stack_byte_allocator<std::byte,1024>>(1024, "arena_loud_out.txt");
     auto arena2 = core::arena_loud<std::allocator<std::byte>>(1024, "arena_loud_out.txt");
-
-    std::unique_ptr<std::string,decltype([](std::string*){})> ptr;
+    
+    std::unique_ptr<std::string,no_op_t<std::string*>> ptr;
 
     ptr.reset(arena1.allocate<std::string>(1));
     std::construct_at(ptr.get(), "Carter Aitken");

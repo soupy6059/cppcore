@@ -295,7 +295,7 @@ namespace core {
         struct rebind {
             using other = stack_byte_allocator<U,cap>;
         };
-        
+
         constexpr pointer allocate(size_type N) {
             decltype(auto) location = payload + i * sizeof(T);
             if(location + N * sizeof(T) > payload + cap * sizeof(T)) {
@@ -303,6 +303,14 @@ namespace core {
             }
             i += N;
             return reinterpret_cast<T*>(location);
+        }
+
+        constexpr bool test(size_type N) {
+            decltype(auto) location = payload + i * sizeof(T);
+            if(location + N * sizeof(T) > payload + cap * sizeof(T)) {
+                return false;
+            }
+            return true;
         }
 
         constexpr void deallocate(pointer, size_type) noexcept {}
@@ -314,6 +322,27 @@ namespace core {
         constexpr void destroy(pointer ptr) noexcept {
             std::destroy_at(ptr);
         }
+    };
+
+    template<typename T, std::size_t cap>
+    struct stack_byte_resetting_allocator {
+        using value_type = T;
+        using size_type = std::size_t;
+        using difference_type = std::ptrdiff_t;
+        using pointer = value_type*;
+
+        alignas(T) std::byte payload[cap * sizeof(T)];
+
+        template<typename U>
+        struct rebind {
+            using other = stack_byte_resetting_allocator<U,cap>;
+        };
+
+        constexpr pointer allocate(size_type N) {
+            if(N > cap) { return nullptr; }
+            return reinterpret_cast<T*>(payload);
+        }
+        constexpr void deallocate(pointer, size_type) noexcept {}
     };
 
     void run_test(std::string_view testname) noexcept;

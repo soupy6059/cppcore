@@ -182,7 +182,7 @@ arena_test2() {
     if(results && results[1]) { *results[1] = 1; }
 
     fib = [&](int N) -> int {
-        if(N >= CAPACITY) return std::numeric_limits<decltype(N)>::max(); // infinity!
+        if(static_cast<std::size_t>(N) >= CAPACITY) return std::numeric_limits<decltype(N)>::max(); // infinity!
         if(N == 0) return 0;
         if(N == 1) return 1;
         if(!results) return fib(N - 1) + fib(N - 2);
@@ -254,6 +254,28 @@ void leak_test() {
     alloc.deallocate(s, 1);
 }
 
+void
+string_test() {
+    using core_string = std::basic_string<char,std::char_traits<char>, core::stack_byte_resetting_allocator<char,64>>;
+    auto str0 = core_string("Carter Aitken");
+    for(auto i [[maybe_unused]] : std::ranges::views::iota(0zu,10zu)) {
+        if(str0.capacity() * 2 > 64) break;
+        constexpr static std::string_view nums = "1234567890";
+        str0 += nums;
+    }
+
+    auto alloc = core::arena_loud<core::stack_byte_allocator<std::byte,1024>>(1024, "logs/string_test_allocator.log");
+    decltype(auto) str1 = alloc.allocate<core_string>(1);
+    std::construct_at(str1, "Carter Aitken");
+    *str1 += "[SUPRISE!]";
+    
+    fmt::output_file("tests/custom_string.out").print("{:?}\n", *str1);
+    core::run_test("custom_string");
+
+    std::destroy_at(str1);
+
+}
+
 int main() {
     access_test();
     const_test();
@@ -265,6 +287,8 @@ int main() {
     arena_test2();
     arena_loud_test();
     leak_test();
+
+    string_test();
 
     return EXIT_SUCCESS;
 

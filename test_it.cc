@@ -225,7 +225,7 @@ void arena_loud_test() {
 
     arena1.reset();
     ptr.reset(arena1.allocate<std::string>(1));
-    std::construct_at(ptr.get(), "Carter Aitken2");
+    new(ptr.get()) std::string("Carter Aitken2");
     ptr->operator+=("[ADDON!]");
 
     fmt::ostream out = fmt::output_file("tests/arena_loud.out");

@@ -10,6 +10,7 @@
 #include <iostream>
 #endif
 #include <cassert>
+#include <string>
 
 // arena_loud
 #include "fmt/core.h"
@@ -169,12 +170,18 @@ private:
 int do_stuff();
 
 namespace core {
-    // - mptr
-    // - uptr
-    // - sptr
-    // - wptr
-    //
-    // - arena
+    using size = std::size_t;
+    constexpr static auto megabyte = size(1024zu*1024zu);
+    constexpr static auto kilobyte = size(1024zu);
+    constexpr static auto prekilobyte = size(512zu);
+    constexpr static auto hectobyte = size(256zu);
+    constexpr static auto prehepta = size(128zu);
+    constexpr static auto decabyte = size(64zu);
+    constexpr static auto predecabyte = size(32zu);
+    constexpr static auto hexabyte = size(16zu);
+    constexpr static auto octobyte = size(8zu);
+    constexpr static auto quadbyte = size(4zu);
+    constexpr static auto dualbyte = size(2zu);
     
     template<typename Alloc = std::allocator<std::byte>>
     struct arena {
@@ -344,6 +351,10 @@ namespace core {
         }
         constexpr void deallocate(pointer, size_type) noexcept {}
     };
+
+    
+    template<size N>
+    using capstr = std::basic_string<char,std::char_traits<char>, core::stack_byte_resetting_allocator<char,N>>;
 
     void run_test(std::string_view testname) noexcept;
 }; // core

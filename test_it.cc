@@ -276,6 +276,21 @@ string_test() {
 
 }
 
+void
+general_usage() {
+    auto memory = core::arena<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte);
+    auto name = std::unique_ptr<core::capstr<core::decabyte>,no_op_t<core::capstr<core::decabyte>*>>();
+    name.reset(memory.allocate<core::capstr<core::decabyte>>(1));
+    std::construct_at(name.get(), "Carter Aitken");
+    name->operator+=("[[]][=][[]]->int[][[]]{} is valid cpp");
+    fmt::output_file("tests/general_usage.out").print("{:?}\n", *name);
+    std::destroy_at(name.get());
+
+    auto name2 = core::capstr<core::hectobyte>("Carter Aitken");
+
+    core::run_test("general_usage");
+}
+
 int main() {
     access_test();
     const_test();
@@ -290,6 +305,7 @@ int main() {
 
     string_test();
 
-    return EXIT_SUCCESS;
+    general_usage();
 
+    return EXIT_SUCCESS;
 }

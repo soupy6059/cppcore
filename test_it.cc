@@ -166,7 +166,7 @@ arena_ub_test() {
 void
 arena_test2() {
     static constexpr std::size_t CAPACITY(1024);
-    static auto storage = core::arena_loud<core::stack_byte_allocator<std::byte,CAPACITY>>(CAPACITY, "fibbo_cache_out.txt");
+    static auto storage = core::arena_loud<core::stack_byte_allocator<std::byte,CAPACITY>>(CAPACITY, "tests/fibbo_cache_out.out");
     storage.reset();
 
     static auto fib = std::function<int(int)>(nullptr);
@@ -195,7 +195,7 @@ arena_test2() {
     };
     
 
-    decltype(auto) fout = std::ofstream("out.txt");
+    decltype(auto) fout = std::ofstream("tests/nothing.out");
     if constexpr(DEBUG) {
         std::ranges::for_each(
             std::ranges::views::iota(0, static_cast<int>(results_size)),
@@ -214,8 +214,7 @@ template<typename T>
 using no_op_t = decltype([](T){});
 
 void arena_loud_test() {
-    auto arena1 = core::arena_loud<core::stack_byte_allocator<std::byte,1024>>(1024, "arena_loud_out.txt");
-    auto arena2 = core::arena_loud<std::allocator<std::byte>>(1024, "arena_loud_out.txt");
+    auto arena1 = core::arena_loud<core::stack_byte_allocator<std::byte,1024>>(1024, "tests/arena_loud0.out");
     
     std::unique_ptr<std::string,no_op_t<std::string*>> ptr;
 

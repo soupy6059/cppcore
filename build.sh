@@ -44,12 +44,12 @@ echo ================== ENDING test_it-quick-test ==============================
 # build release object
 do_and_speak $compiler -O3 $std $warnings $nodebug -c -Iinc src/dynamic_array.cc $include_fmt -o build/dynamic_array-release.o
 # archive object
-do_and_speak ar rcs libdynamic_array-release.a build/dynamic_array-release.o
+do_and_speak ar rcs libcore.a build/dynamic_array-release.o
 # build test
-do_and_speak $compiler -O3 $std $warnings $nodebug test_it.cc $link_fmt -L. -ldynamic_array-release -Iinc -o bin/test_it-release
+do_and_speak $compiler -O3 $std $warnings $nodebug test_it.cc $link_fmt -L. -lcore -Iinc -o bin/test_it-core
 
 echo ================== RUNNING test_it-release ============================================
-do_and_speak ./bin/test_it-release
+do_and_speak ./bin/test_it-core
 echo ================== ENDING test_it-release =============================================
 
 

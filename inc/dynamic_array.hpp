@@ -357,6 +357,69 @@ namespace core {
     using capstr = std::basic_string<char,std::char_traits<char>, core::stack_byte_resetting_allocator<char,N>>;
 
     void run_test(std::string_view testname) noexcept;
+
+    template<typename char_t = char>
+    struct string {
+        char_t *payload;
+        core::size len = 0;
+        core::size cap = 0;
+
+        template<typename Alloc>
+        constexpr decltype(auto) allocate(Alloc &&alloc, core::size N = core::decabyte) {
+            payload = std::forward<Alloc>(alloc).allocate(N);
+            cap = N;
+            std::memset(payload, '\0', N);
+            return *this;
+        }
+
+        template<typename Alloc>
+        constexpr decltype(auto) deallocate(Alloc &&alloc) {
+            std::forward<Alloc>(alloc).deallocate(payload, cap);
+            payload = nullptr;
+            len = 0;
+            cap = 0;
+            return *this;
+        }
+
+        template<typename Alloc, typename StrViewLike>
+        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) {
+            if(!*this) return *this;
+            core::size N = that.size();
+            core::size cap_new = cap;
+            while(cap_new - len < N + core::size(1)) { cap_new *= 2; }
+            if(cap_new != cap) {
+                char_t *payload_new = alloc.allocate(cap_new);
+                if(!payload_new) return *this;
+                std::memset(payload_new, '\0', cap_new);
+                std::memcpy(payload_new, payload, cap);
+                alloc.deallocate(payload, cap);
+
+                cap = cap_new;
+                payload = payload_new;
+            }
+
+            std::memcpy(payload + len, that.data(), N);
+            len += N;
+
+            return *this;
+        }
+
+        [[nodiscard]] constexpr const core::size &size() {
+            return len;
+        }
+
+        [[nodiscard]] constexpr const core::size &capacity() {
+            return cap;
+        }
+
+        [[nodiscard]] constexpr const char_t *const c_str() {
+            return payload;
+        }
+
+        constexpr operator bool() noexcept {
+            return payload;
+        }
+    };
 }; // core
 
 #endif

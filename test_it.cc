@@ -290,6 +290,30 @@ general_usage() {
     core::run_test("general_usage");
 }
 
+void
+strings() {
+    auto memory = core::stack_byte_allocator<char,core::decabyte>();
+//  auto memory = std::allocator<char>();
+    core::string name;
+    name.allocate(memory);
+    name
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter__"))
+    .append(memory, std::string_view("Carter_" ));
+    assert(name);
+    fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.size(), name.capacity());
+    name.deallocate(memory);
+}
+
 int main() {
     access_test();
     const_test();
@@ -305,6 +329,8 @@ int main() {
     string_test();
 
     general_usage();
+
+    strings();
 
     return EXIT_SUCCESS;
 }

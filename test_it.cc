@@ -313,7 +313,7 @@ strings() {
     fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.size(), name.capacity());
     name.deallocate(memory);
 
-    auto nofree_memory = core::arena<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte);
+    auto nofree_memory = core::arena_loud<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte, "logs/nofree_memory.log");
     auto char_arena = nofree_memory.adapt<char>();
     core::string words;
     // Here note we haven't allocated our string yet, but since append
@@ -323,6 +323,19 @@ strings() {
         assert(false && "Bad Alloc!");
     }
     fmt::print("words == {:?}\n", words.c_str());
+
+    std::ranges::for_each(
+        std::ranges::views::iota(core::size(0), core::kilobyte),
+        [&words, &char_arena](core::size i) {
+            words.append(char_arena, std::string_view("."));
+        }
+    );
+    assert(words && "shortting seems to be working!");
+    fmt::print("word.size() == {}; word.capacity() == {}\n", words.size(), words.capacity());
+    // should be about 64 bytes left in char_arena
+    int *num = nofree_memory.allocate<int>(core::size(1));
+    *num = 32;
+    fmt::print("look! i got a num! -> {} <- !!! yay!\n", *num);
 }
 
 int main() {

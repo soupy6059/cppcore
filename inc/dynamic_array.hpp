@@ -260,6 +260,9 @@ namespace core {
             out.print("allocate<{}>({}); // allocates {} bytes\n", typeid(T).name(), N, N * sizeof(T));
             decltype(auto) saved = arena<Alloc>::template allocate<T>(N);
             print_stats();
+            if(!saved) {
+                out.print("\tBAD ALLOC! returning nullptr...\n");
+            }
             return saved; 
         }
 
@@ -269,6 +272,26 @@ namespace core {
             arena<Alloc>::reset();
             print_stats();
             return *this;
+        }
+
+        // Provides a thin allocator film over arenas.  
+        template<typename AdaptedT>
+        struct adaptor_loud {
+            arena_loud *parent;
+            using value_type = Alloc::value_type;
+            using size_type = Alloc::size_type;
+            using difference_type = Alloc::difference_type;
+            constexpr AdaptedT *allocate(size_type N) {
+                return parent->allocate<AdaptedT>(N);
+            }
+            constexpr adaptor_loud &deallocate(AdaptedT*,size_type) {
+                return *this;
+            }
+        };
+
+        template<typename AdaptT> [[nodiscard]]
+        constexpr adaptor_loud<AdaptT> adapt() {
+            return adaptor_loud<AdaptT>(this);
         }
 
         ~arena_loud() noexcept {

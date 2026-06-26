@@ -316,8 +316,12 @@ strings() {
     auto nofree_memory = core::arena<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte);
     auto char_arena = nofree_memory.adapt<char>();
     core::string words;
-    words.allocate(char_arena);
-    words.append(char_arena, std::string_view("int main(void) { return EXIT_SUCCESS; }"));
+    // Here note we haven't allocated our string yet, but since append
+    // is passed an allocator, it's reasonable to assume it can allocate an
+    // initial buffer.
+    if(!words.append(char_arena, std::string_view("int main(void) { return EXIT_SUCCESS; }"))) {
+        assert(false && "Bad Alloc!");
+    }
     fmt::print("words == {:?}\n", words.c_str());
 }
 

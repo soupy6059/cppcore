@@ -209,10 +209,14 @@ namespace core {
         constexpr T *allocate(Alloc::size_type N) {
             decltype(auto) saved = current;
             current += N * sizeof(T);
-            if(current > capacity) return nullptr;
+            if(current > capacity) {
+                current -= N * sizeof(T);
+                return nullptr;
+            }
             return reinterpret_cast<T*>(saved);
         }
         
+        // Provides a thin allocator film over arenas.  
         template<typename AdaptedT>
         struct adaptor {
             arena *parent;
@@ -379,13 +383,14 @@ namespace core {
 
     template<typename char_t = char>
     struct string {
-        char_t *payload;
+        char_t *payload = nullptr;
         core::size len = 0;
         core::size cap = 0;
 
         template<typename Alloc>
         constexpr decltype(auto) allocate(Alloc &&alloc, core::size N = core::decabyte) {
             payload = std::forward<Alloc>(alloc).allocate(N);
+            if(!payload) return *this;
             cap = N;
             std::memset(payload, '\0', N);
             return *this;
@@ -406,7 +411,13 @@ namespace core {
 
         template<typename Alloc, typename StrViewLike>
         constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) {
-            if(!*this) return *this;
+            if(!*this && !size() && !capacity()) {
+                allocate(alloc);
+                if(!*this) {
+                    fmt::print("bad alloc on initial append!");
+                    return *this;
+                }
+            }
             core::size N = that.size();
             core::size cap_new = cap;
             while(cap_new - len < N + core::size(1)) { cap_new *= 2; }
@@ -415,7 +426,7 @@ namespace core {
                 if(!payload_new) return *this;
                 std::memset(payload_new, '\0', cap_new);
                 std::memcpy(payload_new, payload, cap);
-                alloc.deallocate(payload, cap);
+                std::forward<Alloc>(alloc).deallocate(payload, cap);
 
                 cap = cap_new;
                 payload = payload_new;

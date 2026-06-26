@@ -205,12 +205,31 @@ namespace core {
             return *this;
         }
 
-        template<typename T = std::byte> [[nodiscard]] 
+        template<typename T> [[nodiscard]] 
         constexpr T *allocate(Alloc::size_type N) {
             decltype(auto) saved = current;
             current += N * sizeof(T);
             if(current > capacity) return nullptr;
             return reinterpret_cast<T*>(saved);
+        }
+        
+        template<typename AdaptedT>
+        struct adaptor {
+            arena *parent;
+            using value_type = Alloc::value_type;
+            using size_type = Alloc::size_type;
+            using difference_type = Alloc::difference_type;
+            constexpr AdaptedT *allocate(size_type N) {
+                return parent->allocate<AdaptedT>(N);
+            }
+            constexpr adaptor &deallocate(AdaptedT*,size_type) {
+                return *this;
+            }
+        };
+
+        template<typename AdaptT> [[nodiscard]]
+        constexpr adaptor<AdaptT> adapt() {
+            return adaptor<AdaptT>(this);
         }
 
         constexpr ~arena() noexcept {
@@ -379,6 +398,10 @@ namespace core {
             len = 0;
             cap = 0;
             return *this;
+        }
+
+        [[nodiscard]] constexpr decltype(auto) at(core::size i) {
+            return payload[i];
         }
 
         template<typename Alloc, typename StrViewLike>

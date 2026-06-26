@@ -312,6 +312,13 @@ strings() {
     assert(name);
     fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.size(), name.capacity());
     name.deallocate(memory);
+
+    auto nofree_memory = core::arena<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte);
+    auto char_arena = nofree_memory.adapt<char>();
+    core::string words;
+    words.allocate(char_arena);
+    words.append(char_arena, std::string_view("int main(void) { return EXIT_SUCCESS; }"));
+    fmt::print("words == {:?}\n", words.c_str());
 }
 
 int main() {

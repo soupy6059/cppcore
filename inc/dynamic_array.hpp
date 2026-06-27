@@ -411,7 +411,10 @@ namespace core {
         core::size cap = 0;
 
         template<typename Alloc>
-        constexpr decltype(auto) allocate(Alloc &&alloc, core::size N = core::decabyte) {
+        constexpr decltype(auto) allocate(Alloc &&alloc, core::size N = core::decabyte)
+        requires requires {
+            alloc.allocate(N);
+        } {
             payload = std::forward<Alloc>(alloc).allocate(N);
             if(!payload) return *this;
             cap = N;
@@ -432,8 +435,19 @@ namespace core {
             return payload[i];
         }
 
+        struct boring_char {
+            char_t payload;
+            size size_ = 1;
+            [[nodiscard]] constexpr auto size() noexcept {
+                return size_;
+            }
+            [[nodiscard]] constexpr char_t *data() noexcept {
+                return &payload;
+            }
+        };
+
         template<typename Alloc, typename StrViewLike>
-        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) {
+        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) noexcept {
             if(!*this && !size() && !capacity()) {
                 allocate(alloc);
                 if(!*this) {
@@ -459,6 +473,14 @@ namespace core {
             len += N;
 
             return *this;
+        }
+
+        template<typename Alloc>
+        constexpr decltype(auto) append(Alloc alloc, char_t ch) noexcept {
+            return append(std::forward<Alloc>(alloc), boring_char{
+                .payload = ch,
+                .size_ = core::size(1),
+            });
         }
 
         [[nodiscard]] constexpr const core::size &size() {

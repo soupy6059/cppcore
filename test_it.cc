@@ -326,7 +326,7 @@ strings() {
 
     std::ranges::for_each(
         std::ranges::views::iota(core::size(0), core::kilobyte),
-        [&words, &char_arena](core::size i) {
+        [&words, &char_arena](core::size i [[maybe_unused]]) {
             words.append(char_arena, std::string_view("."));
         }
     );
@@ -336,6 +336,26 @@ strings() {
     int *num = nofree_memory.allocate<int>(core::size(1));
     *num = 32;
     fmt::print("look! i got a num! -> {} <- !!! yay!\n", *num);
+}
+
+void
+fuzzing_strings() {
+    decltype(auto) alloc = std::allocator<char>();
+    decltype(auto) to_fuzz = core::string();
+    to_fuzz.allocate(alloc, core::decabyte);
+    to_fuzz.append(alloc, std::string_view("Carter"));
+
+    std::ranges::for_each(
+        std::ranges::views::iota(core::size(1), core::kilobyte),
+        [&](core::size i [[maybe_unused]]) {
+            unsigned char to_append = (::fuzzed<unsigned char>().get() % 26) + 'A';
+            to_fuzz.append(alloc, static_cast<char>(to_append));
+        }
+    );
+
+    fmt::output_file("logs/fuzzed_string.log")
+    .print("{1}/{2} -> {0}\n", to_fuzz.c_str(), to_fuzz.size(), to_fuzz.capacity());
+    to_fuzz.deallocate(alloc);
 }
 
 int main() {
@@ -355,6 +375,8 @@ int main() {
     general_usage();
 
     strings();
+
+    fuzzing_strings();
 
     return EXIT_SUCCESS;
 }

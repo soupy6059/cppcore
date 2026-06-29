@@ -358,6 +358,24 @@ fuzzing_strings() {
     to_fuzz.deallocate(alloc);
 }
 
+template<typename StringAllocator, typename CharAllocator>
+void memptr_tests() {
+    auto str_storage = StringAllocator();
+    auto char_storage = CharAllocator();
+    auto name = core::memptr<core::string<>>();
+    name.allocate(str_storage);
+    std::construct_at(name.payload);
+    name.value().allocate(char_storage, core::hexabyte);
+    
+    name.value().append(char_storage, std::string_view("Carter Aitken!"));
+
+    fmt::output_file("logs/memptr_tests.log").print("memptr_tests() => {}\n", name.value().c_str());
+    
+    name.value().deallocate(char_storage);
+    std::destroy_at(name.payload);
+    name.deallocate(str_storage);
+}
+
 int main() {
     access_test();
     const_test();
@@ -377,6 +395,15 @@ int main() {
     strings();
 
     fuzzing_strings();
+
+    memptr_tests<
+        core::stack_byte_allocator<core::string<>,core::kilobyte>,
+        core::stack_byte_allocator<char,core::kilobyte>
+    >();
+    memptr_tests<
+        std::allocator<core::string<>>,
+        std::allocator<char>
+    >();
 
     return EXIT_SUCCESS;
 }

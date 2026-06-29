@@ -5,12 +5,14 @@
 #include <memory>
 #include <cstddef>
 #include <cstring>
+#include <cassert>
+#include <type_traits>
+#include <string>
 
 #ifndef NDEBUG
 #include <iostream>
 #endif
-#include <cassert>
-#include <string>
+
 
 // arena_loud
 #include "fmt/core.h"
@@ -497,6 +499,31 @@ namespace core {
 
         constexpr operator bool() noexcept {
             return payload;
+        }
+    };
+
+    template<typename T>
+    requires requires { T{}; }
+    struct memptr {
+        T *payload = nullptr;
+
+        template<typename Alloc> constexpr decltype(auto)
+        allocate(Alloc &&alloc, size N = 1) noexcept {
+            payload = std::forward<Alloc>(alloc).allocate(N);
+            return *this;
+        }
+
+        template<typename Alloc> constexpr decltype(auto)
+        deallocate(Alloc &&alloc, size N = 1) noexcept {
+            std::forward<Alloc>(alloc).deallocate(payload, N);
+            return *this;
+        }
+
+        [[nodiscard]] constexpr auto
+        value() noexcept -> T &{
+            static T backup;
+            if(!payload) return backup;
+            return *payload;
         }
     };
 }; // core

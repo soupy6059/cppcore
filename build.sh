@@ -26,6 +26,7 @@ do_and_speak rm build/*
 do_and_speak rm bin/*
 do_and_speak rm tests/*.out
 do_and_speak rm vgcore*
+do_and_speak rm logs/*
 
 include_fmt="-I ../fmt/include"
 link_fmt="${include_fmt} -L ../fmt -lfmt -no-pie"

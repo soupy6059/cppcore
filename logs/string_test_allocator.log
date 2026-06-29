@@ -1,4 +1,0 @@
-arena_loud(1024, logs/string_test_allocator.log);
-allocate<NSt7__cxx1112basic_stringIcSt11char_traitsIcEN4core30stack_byte_resetting_allocatorIcLm64EEEEE>(1); // allocates 96 bytes
-	used: 96; left: 928;
-~arena_loud()

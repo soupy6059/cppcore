@@ -346,7 +346,7 @@ fuzzing_strings() {
     to_fuzz.append(alloc, std::string_view("Carter"));
 
     std::ranges::for_each(
-        std::ranges::views::iota(core::size(1), core::kilobyte),
+        std::ranges::views::iota(core::size(0), core::kilobyte),
         [&](core::size i [[maybe_unused]]) {
             unsigned char to_append = (::fuzzed<unsigned char>().get() % 26) + 'A';
             to_fuzz.append(alloc, static_cast<char>(to_append));

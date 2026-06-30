@@ -504,7 +504,7 @@ namespace core {
 
     template<typename T>
     requires requires { T{}; }
-    struct memptr {
+    struct memptr_unsafe {
         T *payload = nullptr;
 
         template<typename Alloc> constexpr decltype(auto)
@@ -521,9 +521,118 @@ namespace core {
 
         [[nodiscard]] constexpr auto
         value() noexcept -> T &{
-            static T backup;
-            if(!payload) return backup;
             return *payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        at(size i) noexcept -> T &{
+            return payload[i];
+        }
+
+        [[nodiscard]] constexpr auto
+        at(size i) const noexcept -> const T &{
+            return payload[i];
+        }
+    };
+
+    template<typename T>
+    struct memptr: public memptr_unsafe<T> {
+        size extent = 0;
+        template<typename Alloc> constexpr decltype(auto)
+        allocate(Alloc &&alloc, size N = 1) noexcept {
+            extent = N;
+            this->payload = std::forward<Alloc>(alloc).allocate(N);
+            if(!this->payload) extent = size(0);
+            return *this;
+        }
+
+        template<typename Alloc> constexpr decltype(auto)
+        deallocate(Alloc &&alloc) noexcept {
+            std::forward<Alloc>(alloc).deallocate(this->payload, extent);
+            return *this;
+        }
+
+        [[nodiscard]] constexpr auto
+        get_backup() noexcept -> T &{
+            static T backup{};
+            return backup;
+        }
+
+        [[nodiscard]] constexpr auto
+        get_backup() const noexcept -> T const &{
+            static T backup{};
+            return backup;
+        }
+
+        [[nodiscard]] constexpr auto
+        value() noexcept -> T &{
+            if(extent == 0) return get_backup();
+            return *this->payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        at(size i) noexcept -> T &{
+            if(extent <= i || extent == 0) return get_backup();
+            return this->payload[i];
+        }
+
+        [[nodiscard]] constexpr auto
+        at(size i) const noexcept -> T const &{
+            if(extent <= i || extent == 0) return get_backup();
+            return this->payload[i];
+        }
+    };
+
+    template<typename field, size row_count_, size col_count_>
+    struct matrix {
+        memptr<field> underlying;
+        static constexpr size row_count = row_count_;
+        static constexpr size col_count = col_count_;
+        static constexpr size extent = row_count * col_count;
+
+        [[nodiscard]] constexpr field &at(size i, size j) noexcept {
+            return underlying.at(i + j * row_count);
+        }
+
+        [[nodiscard]] constexpr field const &at(size i, size j) const noexcept {
+            return underlying.at(i + j * row_count);
+        }
+        
+        template<typename Alloc, size other_row_count, size other_col_count>
+        [[nodiscard]] constexpr auto 
+        multiply(Alloc &&alloc, matrix<field, other_row_count, other_col_count> const &other) noexcept
+        -> matrix<field, row_count, other_col_count> {
+            matrix<field, row_count, other_col_count> solution;
+            solution.underlying.allocate(std::forward<Alloc>(alloc), extent);
+            if(!solution.underlying.payload) return solution;
+            std::uninitialized_value_construct_n(solution.underlying.payload, extent);
+
+            for(size sol_row = 0; sol_row < solution.row_count; ++sol_row) {
+                for(size sol_col = 0; sol_col < solution.col_count; ++sol_col) {
+                    for(size k = 0; k < this->col_count; ++k) {
+                        solution.at(sol_row,sol_col) += this->at(sol_row, k) * other.at(k, sol_col);
+                    }
+                }
+            }
+
+            return solution;
+        }
+        
+        template<typename Alloc>
+        [[nodiscard]] constexpr auto
+        format(Alloc &&char_alloc) noexcept {
+            auto s = string<>(); 
+            s.allocate(char_alloc);
+            for(size i = 0; i < row_count; ++i) {
+                s.append(char_alloc, '[');
+                for(size j = 0; j < col_count; ++j) {
+                    s.append(char_alloc, std::to_string(at(i, j)));
+                    s.append(char_alloc, ' ');
+                }
+                s.append(char_alloc, ']');
+                if(row_count != 0 && i < row_count - 1) s.append(char_alloc, '\n');
+            }
+            return s;
         }
     };
 }; // core

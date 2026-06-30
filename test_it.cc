@@ -358,22 +358,59 @@ fuzzing_strings() {
     to_fuzz.deallocate(alloc);
 }
 
-template<typename StringAllocator, typename CharAllocator>
-void memptr_tests() {
+template<typename Ptr, typename StringAllocator, typename CharAllocator>
+void memptr_tests(std::string_view filename) {
     auto str_storage = StringAllocator();
     auto char_storage = CharAllocator();
-    auto name = core::memptr<core::string<>>();
+    auto name = Ptr();
     name.allocate(str_storage);
     std::construct_at(name.payload);
     name.value().allocate(char_storage, core::hexabyte);
     
     name.value().append(char_storage, std::string_view("Carter Aitken!"));
 
-    fmt::output_file("logs/memptr_tests.log").print("memptr_tests() => {}\n", name.value().c_str());
+    fmt::output_file(filename.data()).print("memptr_tests() => {}\n", name.value().c_str());
     
     name.value().deallocate(char_storage);
     std::destroy_at(name.payload);
     name.deallocate(str_storage);
+}
+
+void
+matrix_test() {
+    auto alloc = std::allocator<double>();
+
+    auto m0 = core::matrix<typename decltype(alloc)::value_type, 2, 2>();
+    m0.underlying.allocate(alloc, m0.extent);
+    std::uninitialized_value_construct_n(m0.underlying.payload, m0.extent);
+
+    m0.at(0,0) = 2.0;
+    m0.at(1,1) = 1.0;
+
+    auto m1 = core::matrix<typename decltype(alloc)::value_type, 2, 3>();
+    m1.underlying.allocate(alloc, m1.extent);
+    std::uninitialized_value_construct_n(m1.underlying.payload, m1.extent);
+
+    m1.at(0,0) = 2.0;
+    m1.at(1,2) = 3.0;
+
+    auto m2 = m0.multiply(alloc, m1);
+
+    core::string<> m0_repr = m0.format(std::allocator<char>());
+    fmt::print("m0 => {}\n", m0_repr.c_str());
+
+    core::string<> m1_repr = m1.format(std::allocator<char>());
+    fmt::print("m1 => {}\n", m1_repr.c_str());
+
+    core::string<> m2_repr = m2.format(std::allocator<char>());
+    fmt::print("m2 => {}\n", m2_repr.c_str());
+
+    m0_repr.deallocate(std::allocator<char>());
+    m1_repr.deallocate(std::allocator<char>());
+    m2_repr.deallocate(std::allocator<char>());
+    m0.underlying.deallocate(alloc);
+    m1.underlying.deallocate(alloc);
+    m2.underlying.deallocate(alloc);
 }
 
 int main() {
@@ -397,13 +434,34 @@ int main() {
     fuzzing_strings();
 
     memptr_tests<
+        core::memptr<core::string<>>,
         core::stack_byte_allocator<core::string<>,core::kilobyte>,
         core::stack_byte_allocator<char,core::kilobyte>
-    >();
+    >("tests/memptr-stack_alloc.out");
+    core::run_test("memptr-stack_alloc");
+
     memptr_tests<
+        core::memptr<core::string<>>,
         std::allocator<core::string<>>,
         std::allocator<char>
-    >();
+    >("tests/memptr-std::alloc.out");
+    core::run_test("memptr-std::alloc");
+
+    memptr_tests<
+        core::memptr_unsafe<core::string<>>,
+        std::allocator<core::string<>>,
+        std::allocator<char>
+    >("tests/memptr_unsafe-std::alloc.out");
+    core::run_test("memptr_unsafe-std::alloc");
+
+    memptr_tests<
+        core::memptr_unsafe<core::string<>>,
+        core::stack_byte_allocator<core::string<>,core::kilobyte>,
+        core::stack_byte_allocator<char,core::kilobyte>
+    >("tests/memptr_unsafe-stack_alloc.out");
+    core::run_test("memptr_unsafe-stack_alloc");
+
+    matrix_test();
 
     return EXIT_SUCCESS;
 }

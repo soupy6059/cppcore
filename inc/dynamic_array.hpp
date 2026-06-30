@@ -453,7 +453,6 @@ namespace core {
             if(!*this && !size() && !capacity()) {
                 allocate(alloc);
                 if(!*this) {
-                    fmt::print("bad alloc on initial append!");
                     return *this;
                 }
             }

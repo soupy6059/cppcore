@@ -377,7 +377,7 @@ void memptr_tests(std::string_view filename) {
 }
 
 void
-matrix_test() {
+matrix_test() {{
     auto alloc = std::allocator<double>();
 
     auto m0 = core::matrix<typename decltype(alloc)::value_type, 2, 2>();
@@ -411,7 +411,26 @@ matrix_test() {
     m0.underlying.deallocate(alloc);
     m1.underlying.deallocate(alloc);
     m2.underlying.deallocate(alloc);
-}
+} {
+    auto alloc = core::arena<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte);
+    using field = double;
+    auto m0 = core::matrix<field, 2, 2>();
+    m0.underlying.allocate(alloc.adapt<field>(), m0.extent);
+    m0.at(0,0) = 3.0;
+    m0.at(0,1) = 4.0;
+    m0.at(1,0) = -3.5;
+    m0.at(1,1) = 37.0;
+
+    core::string<> m0_repr = m0.format(alloc.adapt<char>());
+    fmt::print("m0' =>\n{}\n", m0_repr.c_str()? m0_repr.c_str() : "(NULL!)");
+
+    auto s = m0.multiply(alloc.adapt<field>(), m0)
+        .format(alloc.adapt<char>())
+        .c_str();
+    fmt::print(
+        "m0' * m0' => \n{}\n", s? s : "(NULL!)"
+    );
+}}
 
 int main() {
     access_test();

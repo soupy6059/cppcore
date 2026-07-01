@@ -284,6 +284,7 @@ namespace core {
             using size_type = Alloc::size_type;
             using difference_type = Alloc::difference_type;
             constexpr AdaptedT *allocate(size_type N) {
+                parent->out.print("arena::adaptor<{}>({}) // allocated {} bytes\n", typeid(AdaptedT).name(), N, N * sizeof(AdaptedT));
                 return parent->allocate<AdaptedT>(N);
             }
             constexpr adaptor_loud &deallocate(AdaptedT*,size_type) {
@@ -293,6 +294,7 @@ namespace core {
 
         template<typename AdaptT> [[nodiscard]]
         constexpr adaptor_loud<AdaptT> adapt() {
+            out.print("arena adapting to allocator<{}>\n", typeid(AdaptT).name());
             return adaptor_loud<AdaptT>(this);
         }
 

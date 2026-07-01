@@ -184,6 +184,16 @@ namespace core {
     constexpr static auto octobyte = size(8zu);
     constexpr static auto quadbyte = size(4zu);
     constexpr static auto dualbyte = size(2zu);
+
+    using i64 = std::int64_t;
+    using i32 = std::int32_t;
+    using i16 = std::int16_t;
+    using i8 = std::int8_t;
+    
+    using u64 = std::uint64_t;
+    using u32 = std::uint32_t;
+    using u16 = std::uint16_t;
+    using u8 = std::uint8_t;
     
     template<typename Alloc = std::allocator<std::byte>>
     struct arena {
@@ -451,7 +461,9 @@ namespace core {
         };
 
         template<typename Alloc, typename StrViewLike>
-        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) noexcept {
+        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) requires requires {
+            that.size();
+        } {
             if(!*this && !size() && !capacity()) {
                 allocate(alloc);
                 if(!*this) {
@@ -476,6 +488,11 @@ namespace core {
             len += N;
 
             return *this;
+        }
+
+        template<typename Alloc, typename StrViewLike>
+        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) {
+            return append(std::forward<Alloc>(alloc), std::string_view(that));
         }
 
         template<typename Alloc>
@@ -541,6 +558,21 @@ namespace core {
         at(size i) const noexcept -> const T &{
             return payload[i];
         }
+
+                [[nodiscard]] constexpr auto
+        operator*() noexcept -> T& {
+            return *payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        operator->() noexcept -> T *{
+            return payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        operator[](core::size i) noexcept -> T &{
+            return payload[i];
+        }
     };
 
     template<typename T>
@@ -571,6 +603,8 @@ namespace core {
             static T backup{};
             return backup;
         }
+
+            
 
         [[nodiscard]] constexpr auto
         value() noexcept -> T &{

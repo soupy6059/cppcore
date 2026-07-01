@@ -421,16 +421,64 @@ matrix_test() {{
     m0.at(1,0) = -3.5;
     m0.at(1,1) = 37.0;
 
-    core::string<> m0_repr = m0.format(alloc.adapt<char>());
-    fmt::print("m0' =>\n{}\n", m0_repr.c_str()? m0_repr.c_str() : "(NULL!)");
-
-    auto s = m0.multiply(alloc.adapt<field>(), m0)
-        .format(alloc.adapt<char>())
-        .c_str();
     fmt::print(
-        "m0' * m0' => \n{}\n", s? s : "(NULL!)"
+        "m0' =>\n{}\n",
+        m0.format(alloc.adapt<char>())
+          .payload_or("(NULL!)")
+    );
+
+    fmt::print(
+        "m0' * m0' => \n{}\n",
+        m0.multiply(alloc.adapt<field>(), m0)
+          .format(alloc.adapt<char>())
+          .payload_or("(NULL!)")
     );
 }}
+
+void markov_chain_test() noexcept {
+    auto arena = core::arena_loud<core::stack_byte_allocator<std::byte,core::megabyte>>(core::megabyte, "logs/markov_chain_arena.log");
+    using field = double;
+    auto m0 = core::matrix<field, 101, 101>();
+    m0.underlying.allocate(arena.adapt<field>(), m0.extent);
+
+    for(core::size i = 0; i < m0.row_count; ++i) {
+        for(core::size j = 0; j < m0.col_count; ++j) {
+            if(i != j) continue;
+            core::size idx0 = 0;
+            if(j == 0) idx0 = m0.col_count - 1;
+            else idx0 = j - 1;
+
+            core::size idx1 = 0;
+            if(j == m0.col_count - 1) idx1 = 0;
+            else idx1 = j + 1;
+            
+            m0.at(i, idx0) = 0.5;
+            m0.at(i, idx1) = 0.5;
+        }
+    }
+    
+    decltype(m0) buffer; 
+    buffer.underlying.allocate(arena.adapt<field>(), buffer.extent);
+    for(core::size k = 0; k < std::numeric_limits<core::size>::max(); ++k) {
+        auto &&_ = m0.multiply(buffer.in_place_allocator(), m0);
+        std::swap(buffer, m0);
+
+        field col_sum = 0.0;
+        for(core::size j = 0; j < m0.row_count; ++j) col_sum += m0.at(j, 0);
+        constexpr static field tolerance = 0.0000001;
+        if(std::abs(col_sum - field(1)) >= tolerance) {
+            fmt::print("x == {}, leading to imprescision at k == {} with tolerance = {}\n", col_sum, k, tolerance);
+            break;
+        }
+    }
+    
+    auto strg = m0.format(arena.adapt<char>());
+    fmt::output_file("logs/markov_result.log")
+    .print(
+        "m0 big, str size is {}\n{}\n",
+        strg.size(), strg.payload_or("nil")
+    );
+}
 
 int main() {
     access_test();
@@ -481,6 +529,8 @@ int main() {
     core::run_test("memptr_unsafe-stack_alloc");
 
     matrix_test();
+
+    markov_chain_test();
 
     return EXIT_SUCCESS;
 }

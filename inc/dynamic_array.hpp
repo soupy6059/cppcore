@@ -496,6 +496,13 @@ namespace core {
             return payload;
         }
 
+        [[nodiscard]] constexpr auto
+        payload_or(const char_t *const backup)
+        noexcept -> const char_t *const{
+            if(!payload) return backup;
+            return payload;
+        }
+
         constexpr operator bool() noexcept {
             return payload;
         }
@@ -596,7 +603,7 @@ namespace core {
         [[nodiscard]] constexpr field const &at(size i, size j) const noexcept {
             return underlying.at(i + j * row_count);
         }
-        
+
         template<typename Alloc, size other_row_count, size other_col_count>
         [[nodiscard]] constexpr auto 
         multiply(Alloc &&alloc, matrix<field, other_row_count, other_col_count> const &other) noexcept
@@ -616,12 +623,35 @@ namespace core {
 
             return solution;
         }
+
+        struct in_place_allocator_t {
+            using value_type = field;
+            using size_type = size;
+            using difference_type = std::ptrdiff_t;
+            using pointer = field*;
+
+            matrix<field,row_count,col_count> src;
+
+            [[nodiscard]] constexpr auto
+            allocate(size_type)
+            noexcept -> pointer {
+                return src.underlying.payload;
+            }
+
+            [[nodiscard]] constexpr auto
+            deallocate(pointer,size_type) noexcept {}
+        };
+
+        [[nodiscard]] constexpr auto
+        in_place_allocator() noexcept -> in_place_allocator_t {
+            return { *this };
+        }        
         
         template<typename Alloc>
         [[nodiscard]] constexpr auto
         format(Alloc &&char_alloc) noexcept {
             auto s = string<>(); 
-            s.allocate(char_alloc);
+            s.allocate(char_alloc, extent * 9 + row_count * 4);
             for(size i = 0; i < row_count; ++i) {
                 s.append(char_alloc, '[');
                 for(size j = 0; j < col_count; ++j) {

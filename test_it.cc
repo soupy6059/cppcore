@@ -21,6 +21,8 @@ constexpr bool DEBUG = true;
 constexpr bool DEBUG = false;
 #endif
 
+FUCKCUFKCUJFI
+
 template<typename T>
 requires std::is_trivially_copyable_v<T>
 struct fuzzed {

@@ -494,20 +494,60 @@ memptr_testing2() noexcept -> void {
 auto
 defer_testing() noexcept -> void {
     core::memptr<core::string<>> name;
-    std::allocator<core::string<>> core_string_alloc;
-    std::allocator<core::string<>::char_t> core_char_alloc;
-    name.allocate(core_string_alloc);
-    core::defer _ ([=] mutable { name.deallocate(core_string_alloc); });
+    std::allocator<core::string<>> string_alloc;
+    std::allocator<core::string<>::char_t> char_alloc;
+    name.allocate(string_alloc);
+    core::defer _ ([=] mutable { name.deallocate(string_alloc); });
     
     core::construct_at(name)
-    .append(core_char_alloc, "[CA]");
+    .append(char_alloc, "[CA]");
     auto _ = core::defer([=] mutable {
-        name->deallocate(core_char_alloc);
+        name->deallocate(char_alloc);
         core::destroy_at(name);
     });
     
     fmt::output_file("logs/defer_testing.log")
     .print("name => {}", name->payload_or("(nil)"));
+}
+
+auto
+monad_testing() noexcept -> void {
+    auto get_numbers = std::allocator<core::i32>();
+    
+    core::memptr<core::i32> x;
+    core::memptr<core::i32> y;
+
+    x.allocate(get_numbers);
+    //core::defer _([=] mutable { x.deallocate(get_numbers); });
+    core::construct_at(x, 32);
+
+    auto square = [](core::i32 num) -> core::i32 {
+        return num * num;
+    };
+
+    auto print_num = [](core::i32 num) -> core::i32 {
+        fmt::print("num == {}\n", num);
+        return num;
+    };
+
+    auto remove_with = []<typename alloc_t>(alloc_t &&alloc) {
+        return [=](core::i32 &num) mutable -> core::memptr<core::i32> {
+            if(num == core::i32(-1)) {
+                std::forward<alloc_t>(alloc)
+                .deallocate(std::addressof(num), 1);
+                return {};
+            }
+            return {{std::addressof(num)}};
+        };
+    };
+
+    auto &&_ = x.transform(square).transform(print_num)
+                .and_then(remove_with(get_numbers))
+                .transform(print_num)
+                .transform([](core::i32) { return -1; })
+                .and_then(remove_with(get_numbers))
+                .transform(print_num);
+    auto &&_ = y.transform(square).transform(print_num);
 }
 
 auto main() noexcept -> core::i32 {
@@ -565,6 +605,8 @@ auto main() noexcept -> core::i32 {
     memptr_testing2();
 
     defer_testing();
+
+    monad_testing();
 
     return EXIT_SUCCESS;
 }

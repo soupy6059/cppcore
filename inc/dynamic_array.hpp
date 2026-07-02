@@ -575,6 +575,32 @@ namespace core {
         operator[](core::size i) noexcept -> T &{
             return payload[i];
         }
+
+        template<typename F> [[nodiscard]] constexpr auto
+        and_then(F &&func) & -> memptr_unsafe {
+            if(!payload) return *this;
+            return std::forward<F>(func)(*payload);
+        }
+
+        template<typename F> [[nodiscard]] constexpr auto
+        and_then(F &&func) && -> memptr_unsafe {
+            if(!payload) return *this;
+            return std::forward<F>(func)(std::move(*payload));
+        }
+
+        template<typename F> [[nodiscard]] constexpr auto
+        transform(F &&func) & -> memptr_unsafe {
+            if(!payload) return *this;
+            *payload = std::forward<F>(func)(*payload);
+            return *this;
+        }
+
+        template<typename F> [[nodiscard]] constexpr auto
+        transform(F &&func) && -> memptr_unsafe {
+            if(!payload) return *this;
+            *payload = std::forward<F>(func)(std::move(*payload));
+            return *this;
+        }
     };
 
     template<typename T>
@@ -654,6 +680,19 @@ namespace core {
         [[nodiscard]] constexpr auto
         operator[](core::size i) const noexcept -> T const &{
             return at(i);
+        }
+
+        template<typename F> [[nodiscard]] constexpr auto
+        and_then(F &&func) -> memptr {
+            if(!this->payload) return *this;
+            return std::forward<F>(func)(*this->payload);
+        }
+
+        template<typename F> [[nodiscard]] constexpr auto
+        transform(F &&func) -> memptr {
+            if(!this->payload) return *this;
+            *this->payload = std::forward<F>(func)(*this->payload);
+            return *this;
         }
     };
 

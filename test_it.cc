@@ -480,7 +480,17 @@ void markov_chain_test() noexcept {
     );
 }
 
-int main() {
+constexpr auto
+memptr_testing2() noexcept -> void {
+    auto arena = core::arena<std::allocator<std::byte>>(core::hectobyte);
+    auto character_allocator = arena.adapt<char>();
+    auto name = core::memptr<core::string<>>().allocate(arena.adapt<core::string<>>());
+    core::construct_at(name).append(character_allocator, "[CA!]");
+    fmt::print("name [gain] => {}\n", name->payload_or("(nil)"));
+    core::destroy_at(name);
+}
+
+auto main() noexcept -> core::i32 {
     access_test();
     const_test();
 
@@ -531,6 +541,8 @@ int main() {
     matrix_test();
 
     markov_chain_test();
+
+    memptr_testing2();
 
     return EXIT_SUCCESS;
 }

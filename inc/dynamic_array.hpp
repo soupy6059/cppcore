@@ -559,7 +559,7 @@ namespace core {
             return payload[i];
         }
 
-                [[nodiscard]] constexpr auto
+        [[nodiscard]] constexpr auto
         operator*() noexcept -> T& {
             return *payload;
         }
@@ -604,8 +604,6 @@ namespace core {
             return backup;
         }
 
-            
-
         [[nodiscard]] constexpr auto
         value() noexcept -> T &{
             if(extent == 0) return get_backup();
@@ -623,7 +621,63 @@ namespace core {
             if(extent <= i || extent == 0) return get_backup();
             return this->payload[i];
         }
+
+        [[nodiscard]] constexpr auto
+        operator*() noexcept -> T& {
+            return value();
+        }
+
+        [[nodiscard]] constexpr auto
+        operator*() const noexcept -> T const & {
+            return value();
+        }
+
+        [[nodiscard]] constexpr auto
+        operator->() noexcept -> T *{
+            if(!this->payload) return std::addressof(get_backup());
+            return this->payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        operator->() const noexcept -> T const *const {
+            if(!this->payload) return std::addressof(get_backup());
+            return this->payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        operator[](core::size i) noexcept -> T &{
+            return at(i);
+        }
+
+        [[nodiscard]] constexpr auto
+        operator[](core::size i) const noexcept -> T const &{
+            return at(i);
+        }
     };
+
+    template<typename T, typename ...Args> constexpr auto
+    construct_at(memptr<T> ptr, Args &&...args) noexcept -> T &{
+        if(!ptr.payload) return ptr.get_backup();
+        std::construct_at(ptr.payload, std::forward<Args>(args)...);
+        return *ptr;
+    }
+
+    template<typename T, typename ...Args> constexpr auto
+    construct_at(memptr_unsafe<T> ptr, Args &&...args) noexcept -> T &{
+        std::construct_at(ptr.payload, std::forward<Args>(args)...);
+        return *ptr;
+    }
+
+    template<typename T> constexpr auto
+    destroy_at(memptr<T> ptr) noexcept -> void {
+        if(!ptr.payload) return;
+        std::destroy_at(ptr.payload);
+    }
+
+    template<typename T> constexpr auto
+    destroy_at(memptr_unsafe<T> ptr) noexcept -> void {
+        std::destroy_at(ptr.payload);
+    }
 
     template<typename field, size row_count_, size col_count_>
     struct matrix {

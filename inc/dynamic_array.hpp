@@ -8,6 +8,7 @@
 #include <cassert>
 #include <type_traits>
 #include <string>
+#include <functional>
 
 #ifndef NDEBUG
 #include <iostream>
@@ -418,8 +419,9 @@ namespace core {
 
     void run_test(std::string_view testname) noexcept;
 
-    template<typename char_t = char>
+    template<typename char_t_ = char>
     struct string {
+        using char_t = char_t_;
         char_t *payload = nullptr;
         core::size len = 0;
         core::size cap = 0;
@@ -753,6 +755,25 @@ namespace core {
             }
             return s;
         }
+    };
+
+    template<typename T> constexpr auto
+    posimod(T x, T y) noexcept -> T {
+        return ((x % y) + y) % y;
+    }
+
+    template<typename T> constexpr auto
+    posisub(T x, T y, T wrap) noexcept -> T {
+        while(x < y) x += wrap;
+        return x - y;
+    }
+
+    struct defer {
+        std::move_only_function<void()> defered;
+
+        explicit defer(decltype(defered)) noexcept;
+
+        ~defer() noexcept;
     };
 }; // core
 

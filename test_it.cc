@@ -21,8 +21,6 @@ constexpr bool DEBUG = true;
 constexpr bool DEBUG = false;
 #endif
 
-FUCKCUFKCUJFI
-
 template<typename T>
 requires std::is_trivially_copyable_v<T>
 struct fuzzed {
@@ -440,28 +438,21 @@ matrix_test() {{
 void markov_chain_test() noexcept {
     auto arena = core::arena_loud<core::stack_byte_allocator<std::byte,core::megabyte>>(core::megabyte, "logs/markov_chain_arena.log");
     using field = double;
-    auto m0 = core::matrix<field, 101, 101>();
+    auto m0 = core::matrix<field, 5, 5>();
     m0.underlying.allocate(arena.adapt<field>(), m0.extent);
 
     for(core::size i = 0; i < m0.row_count; ++i) {
         for(core::size j = 0; j < m0.col_count; ++j) {
             if(i != j) continue;
-            core::size idx0 = 0;
-            if(j == 0) idx0 = m0.col_count - 1;
-            else idx0 = j - 1;
 
-            core::size idx1 = 0;
-            if(j == m0.col_count - 1) idx1 = 0;
-            else idx1 = j + 1;
-            
-            m0.at(i, idx0) = 0.5;
-            m0.at(i, idx1) = 0.5;
+            m0.at(i, core::posisub(j, core::size(1), m0.col_count)) = 0.5;
+            m0.at(i, core::posimod(j + 1, m0.col_count)) = 0.5;
         }
     }
     
     decltype(m0) buffer; 
     buffer.underlying.allocate(arena.adapt<field>(), buffer.extent);
-    for(core::size k = 0; k < std::numeric_limits<core::size>::max(); ++k) {
+    for(core::size k = 0; k < std::min(std::numeric_limits<core::size>::max(), core::size(300)); ++k) {
         auto &&_ = m0.multiply(buffer.in_place_allocator(), m0);
         std::swap(buffer, m0);
 
@@ -474,12 +465,20 @@ void markov_chain_test() noexcept {
         }
     }
     
+#if 0
     auto strg = m0.format(arena.adapt<char>());
     fmt::output_file("logs/markov_result.log")
     .print(
         "m0 big, str size is {}\n{}\n",
         strg.size(), strg.payload_or("nil")
     );
+#else
+    fmt::output_file("logs/markov_result.log")
+    .print("{}\n",
+        m0.format(arena.adapt<core::string<>::char_t>())
+        .payload_or("nil")
+    );
+#endif
 }
 
 constexpr auto
@@ -490,6 +489,25 @@ memptr_testing2() noexcept -> void {
     core::construct_at(name).append(character_allocator, "[CA!]");
     fmt::print("name [gain] => {}\n", name->payload_or("(nil)"));
     core::destroy_at(name);
+}
+
+auto
+defer_testing() noexcept -> void {
+    core::memptr<core::string<>> name;
+    std::allocator<core::string<>> core_string_alloc;
+    std::allocator<core::string<>::char_t> core_char_alloc;
+    name.allocate(core_string_alloc);
+    core::defer _ ([=] mutable { name.deallocate(core_string_alloc); });
+    
+    core::construct_at(name)
+    .append(core_char_alloc, "[CA]");
+    auto _ = core::defer([=] mutable {
+        name->deallocate(core_char_alloc);
+        core::destroy_at(name);
+    });
+    
+    fmt::output_file("logs/defer_testing.log")
+    .print("name => {}", name->payload_or("(nil)"));
 }
 
 auto main() noexcept -> core::i32 {
@@ -546,7 +564,7 @@ auto main() noexcept -> core::i32 {
 
     memptr_testing2();
 
+    defer_testing();
+
     return EXIT_SUCCESS;
 }
-
-YOU CAN REBASE THIS

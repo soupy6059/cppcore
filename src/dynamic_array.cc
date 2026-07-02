@@ -33,3 +33,10 @@ void core::run_test(std::string_view testname) noexcept {
     }
     assert(!((out >> out_tester) || (expect >> expect_tester)));
 }
+
+core::defer::defer(decltype(defered) defered_) noexcept
+: defered(std::move(defered_)) {}
+
+core::defer::~defer() noexcept {
+    defered();
+}

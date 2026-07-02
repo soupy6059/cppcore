@@ -1,7 +1,7 @@
 compiler="clang++"
 debug="-g"
 nodebug="-DNDEBUG"
-std="-std=c++23"
+std="-std=c++2c"
 
 warnings="-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Winvalid-constexpr \
 -Wno-init-list-lifetime -Wold-style-cast -Wcast-align -Wunused \
@@ -67,10 +67,11 @@ do
 done
 
 
+testing_opt=-O0
 for opt in -O0 -O1 -O2 -O3
 do
-    do_and_speak $compiler -O3 $std $warnings $debug test_it.cc $link_fmt -L. -ldynamic_array-${opt} -Iinc -o bin/test_it-${opt}
-    do_and_speak $compiler -fsanitize=address -O3 $std $warnings $debug test_it.cc $link_fmt -L. -ldynamic_array-${opt}-SA -Iinc -o bin/test_it-${opt}-SA
+    do_and_speak $compiler $testing_opt $std $warnings $debug test_it.cc $link_fmt -L. -ldynamic_array-${opt} -Iinc -o bin/test_it-${opt}
+    do_and_speak $compiler -fsanitize=address $testing_opt $std $warnings $debug test_it.cc $link_fmt -L. -ldynamic_array-${opt}-SA -Iinc -o bin/test_it-${opt}-SA
 done
 
 for opt in -O0 -O1 -O2 -O3

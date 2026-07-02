@@ -13,7 +13,9 @@
 #include <bit>
 #include <random>
 #include <limits>
-#include <memory>
+// #include <memory>
+
+// fetch testing
 
 #ifndef NDEBUG
 constexpr bool DEBUG = true;

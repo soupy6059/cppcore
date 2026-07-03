@@ -418,117 +418,6 @@ namespace core {
     using capstr = std::basic_string<char,std::char_traits<char>, core::stack_byte_resetting_allocator<char,N>>;
 
     void run_test(std::string_view testname) noexcept;
-
-    template<typename char_t_ = char>
-    struct string {
-        using char_t = char_t_;
-        char_t *payload = nullptr;
-        core::size len = 0;
-        core::size cap = 0;
-
-        template<typename Alloc>
-        constexpr decltype(auto) allocate(Alloc &&alloc, core::size N = core::decabyte)
-        requires requires {
-            alloc.allocate(N);
-        } {
-            payload = std::forward<Alloc>(alloc).allocate(N);
-            if(!payload) return *this;
-            cap = N;
-            std::memset(payload, '\0', N);
-            return *this;
-        }
-
-        template<typename Alloc>
-        constexpr decltype(auto) deallocate(Alloc &&alloc) {
-            std::forward<Alloc>(alloc).deallocate(payload, cap);
-            payload = nullptr;
-            len = 0;
-            cap = 0;
-            return *this;
-        }
-
-        [[nodiscard]] constexpr decltype(auto) at(core::size i) {
-            return payload[i];
-        }
-
-        struct boring_char {
-            char_t payload;
-            size size_ = 1;
-            [[nodiscard]] constexpr auto size() noexcept {
-                return size_;
-            }
-            [[nodiscard]] constexpr char_t *data() noexcept {
-                return &payload;
-            }
-        };
-
-        template<typename Alloc, typename StrViewLike>
-        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) requires requires {
-            that.size();
-        } {
-            if(!*this && !size() && !capacity()) {
-                allocate(alloc);
-                if(!*this) {
-                    return *this;
-                }
-            }
-            core::size N = that.size();
-            core::size cap_new = cap;
-            while(cap_new - len < N + core::size(1)) { cap_new *= 2; }
-            if(cap_new != cap) {
-                char_t *payload_new = alloc.allocate(cap_new);
-                if(!payload_new) return *this;
-                std::memset(payload_new, '\0', cap_new);
-                std::memcpy(payload_new, payload, cap);
-                std::forward<Alloc>(alloc).deallocate(payload, cap);
-
-                cap = cap_new;
-                payload = payload_new;
-            }
-
-            std::memcpy(payload + len, that.data(), N);
-            len += N;
-
-            return *this;
-        }
-
-        template<typename Alloc, typename StrViewLike>
-        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) {
-            return append(std::forward<Alloc>(alloc), std::string_view(that));
-        }
-
-        template<typename Alloc>
-        constexpr decltype(auto) append(Alloc alloc, char_t ch) noexcept {
-            return append(std::forward<Alloc>(alloc), boring_char{
-                .payload = ch,
-                .size_ = core::size(1),
-            });
-        }
-
-        [[nodiscard]] constexpr const core::size &size() {
-            return len;
-        }
-
-        [[nodiscard]] constexpr const core::size &capacity() {
-            return cap;
-        }
-
-        [[nodiscard]] constexpr const char_t *const c_str() {
-            return payload;
-        }
-
-        [[nodiscard]] constexpr auto
-        payload_or(const char_t *const backup)
-        noexcept -> const char_t *const{
-            if(!payload) return backup;
-            return payload;
-        }
-
-        constexpr operator bool() noexcept {
-            return payload;
-        }
-    };
-
     template<typename T>
     requires requires { T{}; }
     struct memptr_unsafe {
@@ -549,6 +438,16 @@ namespace core {
         [[nodiscard]] constexpr auto
         value() noexcept -> T &{
             return *payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        get() noexcept -> T *{
+            return payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        get() const noexcept -> T const *const{
+            return payload;
         }
 
         [[nodiscard]] constexpr auto
@@ -600,6 +499,11 @@ namespace core {
             if(!payload) return *this;
             *payload = std::forward<F>(func)(std::move(*payload));
             return *this;
+        }
+
+        [[nodiscard]] constexpr auto
+        is_valid() noexcept -> bool {
+            return payload;
         }
     };
 
@@ -694,7 +598,131 @@ namespace core {
             *this->payload = std::forward<F>(func)(*this->payload);
             return *this;
         }
+
+        [[nodiscard]] constexpr auto
+        get() noexcept -> T *{
+            if(!this->payload) return std::addressof(get_backup());
+            return this->payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        get() const noexcept -> T const *const{
+            if(!this->payload) return std::addressof(get_backup());
+            return this->payload;
+        }
+
+        [[nodiscard]] constexpr auto
+        is_valid() const noexcept -> bool {
+            return this->payload;
+        }
     };
+
+    template<typename char_t_ = char>
+    struct string {
+        using char_t = char_t_;
+        memptr<char_t> payload;
+        core::size len = 0;
+
+        template<typename Alloc>
+        constexpr decltype(auto) allocate(Alloc &&alloc, core::size N = core::decabyte) noexcept
+        requires requires {
+            alloc.allocate(N);
+        } {
+            payload.allocate(std::forward<Alloc>(alloc), N);
+            std::memset(payload.get(), '\0', payload.extent);
+            return *this;
+        }
+
+        template<typename Alloc>
+        constexpr decltype(auto) deallocate(Alloc &&alloc) noexcept
+        requires requires {
+            alloc.allocate(size(0));
+        } {
+            payload.deallocate(std::forward<Alloc>(alloc));
+            len = 0;
+            return *this;
+        }
+
+        [[nodiscard]] constexpr decltype(auto) at(core::size i) {
+            return payload[i];
+        }
+
+        struct boring_char {
+            char_t payload;
+            size size_ = 1;
+            [[nodiscard]] constexpr auto size() noexcept {
+                return size_;
+            }
+            [[nodiscard]] constexpr char_t *data() noexcept {
+                return &payload;
+            }
+        };
+
+        template<typename Alloc, typename StrViewLike>
+        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) noexcept
+        requires requires {
+            that.size();
+        } {
+            if(!payload.is_valid()) { allocate(alloc); }
+            if(!payload.is_valid()) { return *this; }
+
+            core::size N = that.size();
+            core::size cap_new = payload.extent;
+            while(cap_new - len < N + core::size(1)) { cap_new *= 2; }
+            if(cap_new != payload.extent) {
+                decltype(payload) payload_new;
+                payload_new.allocate(alloc, cap_new);
+                if(!payload_new.is_valid()) { return *this; }
+                std::memset(payload_new.get(), '\0', payload_new.extent);
+                std::memcpy(payload_new.get(), payload.get(), payload.extent);
+                payload.deallocate(std::forward<Alloc>(alloc));
+
+                payload = payload_new;
+            }
+
+            std::memcpy(payload.get() + len, that.data(), N);
+            len += N;
+
+            return *this;
+        }
+
+        template<typename Alloc, typename StrViewLike>
+        constexpr decltype(auto) append(Alloc &&alloc, StrViewLike that) {
+            return append(std::forward<Alloc>(alloc), std::string_view(that));
+        }
+
+        template<typename Alloc>
+        constexpr decltype(auto) append(Alloc alloc, char_t ch) noexcept {
+            return append(std::forward<Alloc>(alloc), boring_char{
+                .payload = ch,
+                .size_ = core::size(1),
+            });
+        }
+
+        [[nodiscard]] constexpr const core::size &size() {
+            return len;
+        }
+
+        [[nodiscard]] constexpr const core::size &capacity() {
+            return payload.extent;
+        }
+
+        [[nodiscard]] constexpr const char_t *const c_str() {
+            return payload.get();
+        }
+
+        [[nodiscard]] constexpr auto
+        payload_or(const char_t *const backup)
+        noexcept -> const char_t *const{
+            if(!payload.is_valid()) return backup;
+            return payload.get();
+        }
+
+        constexpr operator bool() noexcept {
+            return payload.get();
+        }
+    };
+
 
     template<typename T, typename ...Args> constexpr auto
     construct_at(memptr<T> ptr, Args &&...args) noexcept -> T &{

@@ -359,19 +359,35 @@ fuzzing_strings() {
 }
 
 template<typename Ptr, typename StringAllocator, typename CharAllocator>
-void memptr_tests(std::string_view filename) {
+void memptr_tests(std::string_view filename) noexcept {
     auto str_storage = StringAllocator();
     auto char_storage = CharAllocator();
     auto name = Ptr();
-    name.allocate(str_storage);
-    std::construct_at(name.payload);
-    name.value().allocate(char_storage, core::hexabyte);
+    name.allocate(str_storage); // for some reason this works even when there's very little memory availible (???) tests pass ig
+    if constexpr(std::is_same_v<Ptr,core::memptr_unsafe<core::string<>>>) {
+        if(!name.is_valid()) {
+            fmt::output_file(filename.data())
+            .print("bad alloc on str_storage!\n");
+            return;
+        }
+    }
+    std::construct_at(name.get());
+    name->allocate(char_storage, core::hexabyte);
+    if constexpr(std::is_same_v<Ptr,core::memptr_unsafe<core::string<>>>) {
+        if(!name->payload.is_valid()) {
+            fmt::output_file(filename.data())
+            .print("bad alloc on char_storage!\n");
+            std::destroy_at(name.get());
+            name.deallocate(str_storage);
+            return;
+        }
+    }
     
-    name.value().append(char_storage, std::string_view("Carter Aitken!"));
+    name->append(char_storage, std::string_view("Carter Aitken!"));
 
-    fmt::output_file(filename.data()).print("memptr_tests() => {}\n", name.value().c_str());
+    fmt::output_file(filename.data()).print("memptr_tests() => {}\n", name->payload_or("(nil)"));
     
-    name.value().deallocate(char_storage);
+    name->deallocate(char_storage);
     std::destroy_at(name.payload);
     name.deallocate(str_storage);
 }
@@ -597,6 +613,30 @@ auto main() noexcept -> core::i32 {
         core::stack_byte_allocator<char,core::kilobyte>
     >("tests/memptr_unsafe-stack_alloc.out");
     core::run_test("memptr_unsafe-stack_alloc");
+
+    memptr_tests<
+        core::memptr<core::string<>>,
+        core::stack_byte_allocator<core::string<>,core::dualbyte>,
+        core::stack_byte_allocator<char,core::kilobyte>
+    >("tests/memptr-no_memory_for_string_alloc.out");
+
+    memptr_tests<
+        core::memptr<core::string<>>,
+        core::stack_byte_allocator<core::string<>,core::dualbyte>,
+        core::stack_byte_allocator<char,core::dualbyte>
+    >("tests/memptr-no_memory_for_char_alloc.out");
+
+    memptr_tests<
+        core::memptr_unsafe<core::string<>>,
+        core::stack_byte_allocator<core::string<>,core::kilobyte>,
+        core::stack_byte_allocator<char,core::dualbyte>
+    >("tests/memptr_unsafe-no_memory_for_char_alloc.out");
+
+    memptr_tests<
+        core::memptr_unsafe<core::string<>>,
+        core::stack_byte_allocator<core::string<>,core::size(1)>,
+        core::stack_byte_allocator<char,core::hectobyte>
+    >("tests/memptr_unsafe-no_memory_for_string_alloc.out");
 
     matrix_test();
 

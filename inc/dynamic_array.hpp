@@ -355,7 +355,8 @@ namespace core {
         using size_type = std::size_t;
         using difference_type = std::ptrdiff_t;
         using pointer = value_type*;
-
+        
+        constexpr static size_type extent = cap * sizeof(T);
         alignas(T) std::byte payload[cap * sizeof(T)];
         size_type i = 0;
         

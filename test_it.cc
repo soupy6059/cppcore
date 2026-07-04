@@ -134,10 +134,11 @@ const_test() {
 
 void
 arena_test() {
-    auto alloc = core::arena(256);
+    auto alloc = core::arena(core::kilobyte);
     decltype(auto) x = alloc.allocate<int>(1);
     decltype(auto) y = alloc.allocate<int>(1);
     decltype(auto) z = alloc.allocate<std::string>(1);
+
     std::construct_at(x, 23);
     std::construct_at(y, 34);
     std::construct_at(z, "[CA]");
@@ -363,9 +364,13 @@ void memptr_tests(std::string_view filename) noexcept {
     auto str_storage = StringAllocator();
     auto char_storage = CharAllocator();
     auto name = Ptr();
-    name.allocate(str_storage); // for some reason this works even when there's very little memory availible (???) tests pass ig
+    // for some reason this works even when there's very little memory availible (???)
+    // tests pass ig
+    name.allocate(str_storage);
     if constexpr(std::is_same_v<Ptr,core::memptr_unsafe<core::string<>>>) {
+        fmt::print("testing for bad alloc on str_storage\n");
         if(!name.is_valid()) {
+            fmt::print("\tBAD ALLOC!YAYAYYAYYA\n");
             fmt::output_file(filename.data())
             .print("bad alloc on str_storage!\n");
             return;
@@ -570,7 +575,6 @@ auto main() noexcept -> core::i32 {
     access_test();
     const_test();
 
-    arena_test();
     static_assert(arena_ub_test());
     arena_test2();
     arena_test2();
@@ -637,6 +641,18 @@ auto main() noexcept -> core::i32 {
         core::stack_byte_allocator<core::string<>,core::size(1)>,
         core::stack_byte_allocator<char,core::hectobyte>
     >("tests/memptr_unsafe-no_memory_for_string_alloc.out");
+    
+    struct bad_string_allocator {
+        core::string<> *allocate(core::size) {
+            return nullptr;
+        }
+        void deallocate(core::string<>*,core::size) {}
+    };
+    memptr_tests<
+        core::memptr_unsafe<core::string<>>,
+        bad_string_allocator,
+        core::stack_byte_allocator<char,core::hectobyte>
+    >("tests/memptr_unsafe-bad_allocator.out");
 
     matrix_test();
 
@@ -647,6 +663,8 @@ auto main() noexcept -> core::i32 {
     defer_testing();
 
     monad_testing();
+
+    arena_test();
 
     return EXIT_SUCCESS;
 }

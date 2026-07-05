@@ -4,6 +4,7 @@
 #ifndef NDEBUG
 #include <iostream>
 #endif
+#include <vector>
 #include <fstream>
 #include <algorithm>
 #include <ranges>
@@ -215,7 +216,8 @@ template<typename T>
 using no_op_t = decltype([](T){});
 
 void arena_loud_test() {
-    auto arena1 = core::arena_loud<core::stack_byte_allocator<std::byte,1024>>(1024, "tests/arena_loud0.out");
+    auto arena1 = core::arena_loud<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte, "tests/arena_loud0.out");
+    assert(arena1.allocate<std::string>(1));
     
     std::unique_ptr<std::string,no_op_t<std::string*>> ptr;
 
@@ -310,7 +312,7 @@ strings() {
     .append(memory, std::string_view("Carter__"))
     .append(memory, std::string_view("Carter__"))
     .append(memory, std::string_view("Carter_" ));
-    assert(name);
+    assert(name.payload.is_valid());
     fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.size(), name.capacity());
     name.deallocate(memory);
 
@@ -320,7 +322,7 @@ strings() {
     // Here note we haven't allocated our string yet, but since append
     // is passed an allocator, it's reasonable to assume it can allocate an
     // initial buffer.
-    if(!words.append(char_arena, std::string_view("int main(void) { return EXIT_SUCCESS; }"))) {
+    if(!words.append(char_arena, std::string_view("int main(void) { return EXIT_SUCCESS; }")).payload.is_valid()) {
         assert(false && "Bad Alloc!");
     }
     fmt::print("words == {:?}\n", words.c_str());
@@ -331,7 +333,7 @@ strings() {
             words.append(char_arena, std::string_view("."));
         }
     );
-    assert(words && "shortting seems to be working!");
+    assert(words.payload.is_valid() && "shortting seems to be working!");
     fmt::print("word.size() == {}; word.capacity() == {}\n", words.size(), words.capacity());
     // should be about 64 bytes left in char_arena
     int *num = nofree_memory.allocate<int>(core::size(1));
@@ -402,15 +404,15 @@ matrix_test() {{
     auto alloc = std::allocator<double>();
 
     auto m0 = core::matrix<typename decltype(alloc)::value_type, 2, 2>();
-    m0.underlying.allocate(alloc, m0.extent);
-    std::uninitialized_value_construct_n(m0.underlying.payload, m0.extent);
+    m0.underlying.allocate(alloc, m0.amount_to_allocate);
+    std::uninitialized_value_construct_n(m0.underlying.payload, m0.amount_to_allocate);
 
     m0.at(0,0) = 2.0;
     m0.at(1,1) = 1.0;
 
     auto m1 = core::matrix<typename decltype(alloc)::value_type, 2, 3>();
-    m1.underlying.allocate(alloc, m1.extent);
-    std::uninitialized_value_construct_n(m1.underlying.payload, m1.extent);
+    m1.underlying.allocate(alloc, m1.amount_to_allocate);
+    std::uninitialized_value_construct_n(m1.underlying.payload, m1.amount_to_allocate);
 
     m1.at(0,0) = 2.0;
     m1.at(1,2) = 3.0;
@@ -436,7 +438,7 @@ matrix_test() {{
     auto alloc = core::arena<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte);
     using field = double;
     auto m0 = core::matrix<field, 2, 2>();
-    m0.underlying.allocate(alloc.adapt<field>(), m0.extent);
+    m0.underlying.allocate(alloc.adapt<field>(), m0.amount_to_allocate);
     m0.at(0,0) = 3.0;
     m0.at(0,1) = 4.0;
     m0.at(1,0) = -3.5;
@@ -460,7 +462,7 @@ void markov_chain_test() noexcept {
     auto arena = core::arena_loud<core::stack_byte_allocator<std::byte,core::megabyte>>(core::megabyte, "logs/markov_chain_arena.log");
     using field = double;
     auto m0 = core::matrix<field, 5, 5>();
-    m0.underlying.allocate(arena.adapt<field>(), m0.extent);
+    m0.underlying.allocate(arena.adapt<field>(), m0.amount_to_allocate);
 
     for(core::size i = 0; i < m0.row_count; ++i) {
         for(core::size j = 0; j < m0.col_count; ++j) {
@@ -472,7 +474,7 @@ void markov_chain_test() noexcept {
     }
     
     decltype(m0) buffer; 
-    buffer.underlying.allocate(arena.adapt<field>(), buffer.extent);
+    buffer.underlying.allocate(arena.adapt<field>(), buffer.amount_to_allocate);
     for(core::size k = 0; k < std::min(std::numeric_limits<core::size>::max(), core::size(300)); ++k) {
         auto &&_ = m0.multiply(buffer.in_place_allocator(), m0);
         std::swap(buffer, m0);
@@ -532,7 +534,7 @@ defer_testing() noexcept -> void {
 }
 
 auto
-monad_testing() noexcept -> void {
+monad_testing() -> void {
     auto get_numbers = std::allocator<core::i32>();
     
     core::memptr<core::i32> x;
@@ -570,6 +572,77 @@ monad_testing() noexcept -> void {
                 .transform(print_num);
     auto &&_ = y.transform(square).transform(print_num);
 }
+
+auto matrix_fun() noexcept -> void {
+    auto arena = core::arena<
+        core::stack_byte_allocator<
+            std::byte,
+            core::kilobyte
+        >
+    >(core::kilobyte);
+    
+    using field = float;
+
+    auto A = core::matrix<field, 5, 5>();
+    A.underlying.allocate(arena.adapt<field>(), A.amount_to_allocate);
+    std::uninitialized_value_construct_n(A.underlying.get(), A.underlying.extent);
+
+    auto x = core::matrix<field, 5, 1>();
+    x.underlying.allocate(arena.adapt<field>(), x.amount_to_allocate);
+    std::uninitialized_value_construct_n(x.underlying.get(), x.underlying.extent);
+   
+    static_assert(std::forward_iterator<core::memptr<field>>); 
+    static_assert(std::ranges::forward_range<core::memptr<field>>); 
+    static_assert(std::ranges::view<core::memptr<field>>); 
+    for(core::size n = 0; field &i: x.underlying
+    | std::views::filter([&n](field) mutable { ++n; return n % 2 == 0; })) {
+        fmt::print("loop!\n");
+        i = static_cast<field>(n * n + 1);
+    }
+
+    fmt::print("{}\n", x.format(arena.adapt<char>()).payload_or("(nil)"));
+}
+
+
+auto memptr_ranges = [] {
+    auto arena = core::arena<
+        core::stack_byte_allocator<
+            std::byte,
+            core::kilobyte
+        >
+    >(core::kilobyte);
+
+    core::memptr<std::vector<core::i32>> valid;
+    core::memptr<std::vector<core::i32>> invalid;
+
+    valid.allocate(arena.adapt<decltype(valid)::value_type>(), 1);
+    core::construct_at(valid);
+
+    auto pb = [](core::i32 num) {
+        return [num](std::vector<core::i32> &v) {
+            v.push_back(num);
+        };
+    };
+
+    std::ranges::for_each(std::ranges::views::iota(core::i32(1), core::i32(6)),
+    [=](core::i32 x) mutable {
+        std::ranges::for_each(valid, pb(x));
+        std::ranges::for_each(invalid, pb(x));
+    });
+    
+    auto file = fmt::output_file("logs/range_testing.log");
+    auto print_vector = [&file](std::vector<core::i32> &v) {
+        std::ranges::for_each(v, [&file](core::i32 x) {
+            file.print("{}\n", x);
+        });
+    };
+
+    std::ranges::for_each(valid, print_vector);
+    std::ranges::for_each(invalid, print_vector);
+    
+    core::destroy_at(valid);
+    // valid.deallocate(arena.adapt<decltype(valid)::value_type>());
+};
 
 auto main() noexcept -> core::i32 {
     access_test();
@@ -665,6 +738,10 @@ auto main() noexcept -> core::i32 {
     monad_testing();
 
     arena_test();
+
+    matrix_fun();
+
+    memptr_ranges();
 
     return EXIT_SUCCESS;
 }

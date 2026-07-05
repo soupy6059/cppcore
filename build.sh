@@ -21,6 +21,7 @@ function do_and_speak {
     $@
 }
 
+do_and_speak clear
 do_and_speak rm *.a
 do_and_speak rm build/*
 do_and_speak rm bin/*

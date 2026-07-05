@@ -356,30 +356,26 @@ namespace core {
         using difference_type = std::ptrdiff_t;
         using pointer = value_type*;
         
-        constexpr static size_type extent = cap * sizeof(T);
-        alignas(T) std::byte payload[cap * sizeof(T)];
-        size_type i = 0;
+        std::byte payload[cap];
+        std::byte *current = payload;
         
         template<typename U>
         struct rebind {
             using other = stack_byte_allocator<U,cap>;
         };
 
-        constexpr pointer allocate(size_type N) {
-            decltype(auto) location = payload + i * sizeof(T);
-            if(location + N * sizeof(T) > payload + cap * sizeof(T)) {
+        constexpr auto allocate(size_type N) noexcept -> pointer {
+            std::byte *saved = current;
+            current += N * sizeof(T);
+            if(current > payload + cap) {
+                current -= N * sizeof(T);
                 return nullptr;
             }
-            i += N;
-            return reinterpret_cast<T*>(location);
+            return reinterpret_cast<pointer>(saved);
         }
 
-        constexpr bool test(size_type N) {
-            decltype(auto) location = payload + i * sizeof(T);
-            if(location + N * sizeof(T) > payload + cap * sizeof(T)) {
-                return false;
-            }
-            return true;
+        constexpr bool test(size_type N) noexcept {
+            return current + N * sizeof(T) > payload + cap;
         }
 
         constexpr void deallocate(pointer, size_type) noexcept {}
@@ -400,7 +396,7 @@ namespace core {
         using difference_type = std::ptrdiff_t;
         using pointer = value_type*;
 
-        alignas(T) std::byte payload[cap * sizeof(T)];
+        alignas(T) std::byte payload[cap];
 
         template<typename U>
         struct rebind {
@@ -408,7 +404,7 @@ namespace core {
         };
 
         constexpr pointer allocate(size_type N) {
-            if(N > cap) { return nullptr; }
+            if(N * sizeof(T) > cap) { return nullptr; }
             return reinterpret_cast<T*>(payload);
         }
         constexpr void deallocate(pointer, size_type) noexcept {}
@@ -509,8 +505,40 @@ namespace core {
     };
 
     template<typename T>
-    struct memptr: public memptr_unsafe<T> {
+    struct memptr: public memptr_unsafe<T>, public std::ranges::view_interface<memptr<T>> {
         size extent = 0;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using iterator_categroy = std::forward_iterator_tag;
+        
+        constexpr auto &operator++() noexcept {
+            this->payload += 1;
+            extent = extent == 0? 0 : extent - 1;
+            return *this;
+        }
+
+        constexpr auto operator++(int) noexcept {
+            auto saved = *this;
+            ++*this;
+            return saved;
+        }
+
+        constexpr auto operator==(memptr const other) const noexcept -> bool {
+            return other.payload == this->payload;
+        }
+
+        constexpr auto begin() noexcept -> memptr {
+            return *this;
+        }
+
+        constexpr auto end() noexcept {
+        #if 1
+            return memptr(memptr_unsafe(this->payload + extent), std::ranges::view_interface<memptr<T>>(), 0);
+        #else
+            return memptr(memptr_unsafe<T>(nullptr), std::ranges::view_interface<memptr<T>>(), 0);
+        #endif
+        }
+
         template<typename Alloc> constexpr decltype(auto)
         allocate(Alloc &&alloc, size N = 1) noexcept {
             extent = N;
@@ -526,64 +554,36 @@ namespace core {
         }
 
         [[nodiscard]] constexpr auto
-        get_backup() noexcept -> T &{
+        get_backup() const noexcept -> T &{
             static T backup{};
             return backup;
         }
 
         [[nodiscard]] constexpr auto
-        get_backup() const noexcept -> T const &{
-            static T backup{};
-            return backup;
-        }
-
-        [[nodiscard]] constexpr auto
-        value() noexcept -> T &{
+        value() const noexcept -> T &{
             if(extent == 0) return get_backup();
             return *this->payload;
         }
 
         [[nodiscard]] constexpr auto
-        at(size i) noexcept -> T &{
+        at(size i) const noexcept -> T &{
             if(extent <= i || extent == 0) return get_backup();
             return this->payload[i];
         }
 
         [[nodiscard]] constexpr auto
-        at(size i) const noexcept -> T const &{
-            if(extent <= i || extent == 0) return get_backup();
-            return this->payload[i];
-        }
-
-        [[nodiscard]] constexpr auto
-        operator*() noexcept -> T& {
+        operator*() const noexcept -> T& {
             return value();
         }
 
         [[nodiscard]] constexpr auto
-        operator*() const noexcept -> T const & {
-            return value();
-        }
-
-        [[nodiscard]] constexpr auto
-        operator->() noexcept -> T *{
+        operator->() const noexcept -> T *{
             if(!this->payload) return std::addressof(get_backup());
             return this->payload;
         }
 
         [[nodiscard]] constexpr auto
-        operator->() const noexcept -> T const *const {
-            if(!this->payload) return std::addressof(get_backup());
-            return this->payload;
-        }
-
-        [[nodiscard]] constexpr auto
-        operator[](core::size i) noexcept -> T &{
-            return at(i);
-        }
-
-        [[nodiscard]] constexpr auto
-        operator[](core::size i) const noexcept -> T const &{
+        operator[](core::size i) const noexcept -> T &{
             return at(i);
         }
 
@@ -718,10 +718,6 @@ namespace core {
             if(!payload.is_valid()) return backup;
             return payload.get();
         }
-
-        constexpr operator bool() noexcept {
-            return payload.get();
-        }
     };
 
 
@@ -754,7 +750,7 @@ namespace core {
         memptr<field> underlying;
         static constexpr size row_count = row_count_;
         static constexpr size col_count = col_count_;
-        static constexpr size extent = row_count * col_count;
+        static constexpr size amount_to_allocate = row_count * col_count;
 
         [[nodiscard]] constexpr field &at(size i, size j) noexcept {
             return underlying.at(i + j * row_count);
@@ -769,9 +765,9 @@ namespace core {
         multiply(Alloc &&alloc, matrix<field, other_row_count, other_col_count> const &other) noexcept
         -> matrix<field, row_count, other_col_count> {
             matrix<field, row_count, other_col_count> solution;
-            solution.underlying.allocate(std::forward<Alloc>(alloc), extent);
+            solution.underlying.allocate(std::forward<Alloc>(alloc), underlying.extent);
             if(!solution.underlying.payload) return solution;
-            std::uninitialized_value_construct_n(solution.underlying.payload, extent);
+            std::uninitialized_value_construct_n(solution.underlying.payload, underlying.extent);
 
             for(size sol_row = 0; sol_row < solution.row_count; ++sol_row) {
                 for(size sol_col = 0; sol_col < solution.col_count; ++sol_col) {
@@ -811,7 +807,7 @@ namespace core {
         [[nodiscard]] constexpr auto
         format(Alloc &&char_alloc) noexcept {
             auto s = string<>(); 
-            s.allocate(char_alloc, extent * 9 + row_count * 4);
+            s.allocate(char_alloc, underlying.extent * 9 + row_count * 4);
             for(size i = 0; i < row_count; ++i) {
                 s.append(char_alloc, '[');
                 for(size j = 0; j < col_count; ++j) {

@@ -315,8 +315,6 @@ void memptr_tests(std::string_view filename) noexcept {
     auto str_storage = StringAllocator();
     auto char_storage = CharAllocator();
     auto name = Ptr();
-    // for some reason this works even when there's very little memory availible (???)
-    // tests pass ig
     name.allocate(str_storage);
     if constexpr(std::is_same_v<Ptr,core::memptr_unsafe<core::string<>>>) {
         fmt::print("testing for bad alloc on str_storage\n");
@@ -650,6 +648,34 @@ constexpr auto memptr_ranges = [] {
     core::destroy_at(valid);
 };
 
+auto testing_default_pool() {
+    auto pool = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(core::hexabyte * 2 + 1);
+    auto l0 [[maybe_unused]] = pool.allocate<core::u8>(1);
+    auto s0   = core::string<>();
+    auto s1   = core::string<>();
+    s0.allocate(pool.adapt<core::string<>::char_t>(), core::hexabyte);
+    s1.allocate(pool.adapt<core::string<>::char_t>(), core::hexabyte);
+    
+    auto file = fmt::output_file("logs/strings_and_pools.log");
+    auto log_string = [&file](std::string_view name, core::string<> s) {
+        file.print("{} => {}.length() == {}; {}.capacity() == {}\n\t{:?}\n", name, name, s.length(), name, s.capacity(), s.c_str());
+    };
+#define LOG(X) do { log_string(#X, X); } while(false)
+
+    for(decltype(pool)::difference_type i = 0; i < pool.capacity - pool.payload; ++i) {
+        s0.append(pool.adapt<core::string<>::char_t>(), '#');
+        s1.append(pool.adapt<core::string<>::char_t>(), '@');
+    }
+
+    assert(s0.length() == std::strlen(s0.c_str()));
+    assert(s1.length() == std::strlen(s1.c_str()));
+
+    LOG(s0);
+    LOG(s1);
+
+#undef LOG
+}
+
 auto main() noexcept -> core::i32 {
     static_assert(pool_ub_test());
     pool_test2();
@@ -743,6 +769,8 @@ auto main() noexcept -> core::i32 {
     matrix_fun();
 
     memptr_ranges();
+
+    testing_default_pool();
 
     return EXIT_SUCCESS;
 }

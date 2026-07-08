@@ -128,7 +128,6 @@ struct adapt {
     adapt(weird_pointer &&ptr) noexcept
         : payload(ptr.get()), extent(ptr.extent) {}
 
-
     template<typename U>
     struct rebind {
         using other = adapt<U>;

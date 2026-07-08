@@ -1,4 +1,4 @@
-compiler="clang++"
+compiler="g++"
 debug="-g"
 nodebug="-DNDEBUG"
 std="-std=c++23"

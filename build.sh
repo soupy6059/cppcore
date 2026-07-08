@@ -1,7 +1,7 @@
 compiler="clang++"
 debug="-g"
 nodebug="-DNDEBUG"
-std="-std=c++2c"
+std="-std=c++23"
 
 
 warnings="-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Winvalid-constexpr \

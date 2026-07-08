@@ -1,11 +1,3 @@
-#include "core/allocator.hpp"
-#include "core/pool.hpp"
-#include "core/core.hpp"
-#include "core/defer.hpp"
-#include "core/matrix.hpp"
-#include "core/memptr.hpp"
-#include "core/string.hpp"
-
 #include <string>
 #include <functional>
 #ifndef NDEBUG
@@ -22,6 +14,15 @@
 #include <random>
 #include <limits>
 #include <memory>
+
+#include "core/allocator.hpp"
+#include "core/pool.hpp"
+#include "core/core.hpp"
+#include "core/defer.hpp"
+#include "core/matrix.hpp"
+#include "core/memptr.hpp"
+#include "core/string.hpp"
+
 
 #ifndef NDEBUG
 constexpr bool DEBUG = true;
@@ -261,7 +262,7 @@ strings() {
     .append(memory, std::string_view("Carter__"))
     .append(memory, std::string_view("Carter_" ));
     assert(name.payload.is_valid());
-    fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.size(), name.capacity());
+    fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.length(), name.capacity());
     name.deallocate(memory);
 
     auto nofree_memory = core::pool_loud<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte, "logs/nofree_memory.log");
@@ -282,7 +283,7 @@ strings() {
         }
     );
     assert(words.payload.is_valid() && "shortting seems to be working!");
-    fmt::print("word.size() == {}; word.capacity() == {}\n", words.size(), words.capacity());
+    fmt::print("word.size() == {}; word.capacity() == {}\n", words.length(), words.capacity());
     // should be about 64 bytes left in char_pool
     int *num = nofree_memory.allocate<int>(core::size(1));
     *num = 32;
@@ -305,7 +306,7 @@ fuzzing_strings() {
     );
 
     fmt::output_file("logs/fuzzed_string.log")
-    .print("{1}/{2} -> {0}\n", to_fuzz.c_str(), to_fuzz.size(), to_fuzz.capacity());
+    .print("{1}/{2} -> {0}\n", to_fuzz.c_str(), to_fuzz.length(), to_fuzz.capacity());
     to_fuzz.deallocate(alloc);
 }
 
@@ -458,7 +459,8 @@ void markov_chain_test() noexcept {
     std::uninitialized_value_construct_n(buffer2.underlying.get(), buffer2.amount_to_allocate);
 
     for(core::size k = 0; k < std::min(std::numeric_limits<core::size>::max(), core::size(300)); ++k) {
-        auto &&_ = buffer1.multiply(buffer2.in_place_allocator(), m0);
+        //auto &&l0 [[maybe_unused]] = buffer1.multiply(buffer2.in_place_allocator(), m0);
+        auto &&g [[maybe_unused]] = buffer1.multiply(core::alloc::adapt(buffer2.underlying), m0);
         std::swap(buffer1, buffer2);
 
         {
@@ -498,7 +500,7 @@ void markov_chain_test() noexcept {
 #endif
 }
 
-constexpr auto
+auto
 memptr_testing2() noexcept -> void {
     auto pool = core::pool<std::allocator<std::byte>>(core::hectobyte);
     auto character_allocator = pool.adapt<char>();
@@ -514,11 +516,11 @@ defer_testing() noexcept -> void {
     std::allocator<core::string<>> string_alloc;
     std::allocator<core::string<>::char_t> char_alloc;
     name.allocate(string_alloc);
-    core::defer _ ([=] mutable { name.deallocate(string_alloc); });
+    core::defer l0 ([=] mutable { name.deallocate(string_alloc); });
     
     core::construct_at(name)
     .append(char_alloc, "[CA]");
-    auto _ = core::defer([=] mutable {
+    auto l1 = core::defer([=] mutable {
         name->deallocate(char_alloc);
         core::destroy_at(name);
     });
@@ -549,23 +551,23 @@ monad_testing() -> void {
     };
 
     auto remove_with = []<typename alloc_t>(alloc_t &&alloc) {
-        return [=](core::i32 &num) mutable -> core::memptr<core::i32> {
+        return [=](core::i32 &num) mutable {
             if(num == core::i32(-1)) {
                 std::forward<alloc_t>(alloc)
                 .deallocate(std::addressof(num), 1);
-                return {};
+                return core::memptr<core::i32>();
             }
-            return {{std::addressof(num)}};
+            return core::memptr<core::i32>({std::addressof(num)}, {}, 1);
         };
     };
 
-    auto &&_ = x.transform(square).transform(print_num)
+    auto &&l1[[maybe_unused]] = x.transform(square).transform(print_num)
                 .and_then(remove_with(get_numbers))
                 .transform(print_num)
                 .transform([](core::i32) { return -1; })
                 .and_then(remove_with(get_numbers))
                 .transform(print_num);
-    auto &&_ = y.transform(square).transform(print_num);
+    auto &&l2[[maybe_unused]] = y.transform(square).transform(print_num);
 }
 
 auto matrix_fun() noexcept -> void {

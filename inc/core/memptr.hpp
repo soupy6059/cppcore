@@ -210,7 +210,6 @@ destroy_at(memptr_unsafe<T> ptr) noexcept -> void {
     std::destroy_at(ptr.payload);
 }
 
-
 };
 
 #endif

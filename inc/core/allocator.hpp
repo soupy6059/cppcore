@@ -9,6 +9,14 @@
 namespace core {
 namespace alloc {
 
+#ifdef SAFEPOINTER
+template<typename T>
+concept SafePointer = requires(T ptr) {
+    ptr.get();
+    ptr.extent;
+};
+#endif
+
 template<typename T, std::size_t cap>
 struct typed {
     using value_type = T;
@@ -105,7 +113,41 @@ struct resetting {
     constexpr void deallocate(pointer, size_type) noexcept {}
 };
 
+template<typename T>
+struct adapt {
+    using value_type = T;
+    using size_type = size;
+    using difference_type = std::ptrdiff_t;
+    using pointer = value_type*;
+
+    T *payload;
+    size extent;
+
+    constexpr adapt(T *payload_, size extent_) noexcept
+        : payload(payload_), extent(extent_) {}
+#ifdef SAFEPOINTER
+    template<SafePointer weird_pointer>
+    constexpr adapt(weird_pointer &&ptr) noexcept
+        : payload(ptr.get()), extent(std::forward<weird_pointer>(ptr).extent) {}
+#endif
+
+    template<typename U>
+    struct rebind {
+        using other = adapt<U>;
+    };
+
+    constexpr pointer allocate(size_type N) {
+        if(N * sizeof(T) > extent) { return nullptr; }
+        return reinterpret_cast<T*>(payload);
+    }
+
+    constexpr void deallocate(pointer, size_type) noexcept {}
 };
+
+#ifdef SAFEPOINTER
+template<SafePointer weird_pointer>
+adapt(weird_pointer &&ptr) -> adapt<typename weird_pointer::value_type>;
 };
+#endif
 
 #endif

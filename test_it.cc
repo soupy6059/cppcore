@@ -448,6 +448,7 @@ void markov_chain_test() noexcept {
     decltype(m0) buffer1;
     decltype(m0) buffer2;
 
+    // core::alloc::adapt<field>(pool)
     buffer1.underlying.allocate(pool.adapt<field>(), buffer1.amount_to_allocate);
     std::uninitialized_value_construct_n(buffer1.underlying.get(), buffer1.amount_to_allocate);
     for(core::size i = 0; i < buffer1.row_count; ++i) {
@@ -458,7 +459,11 @@ void markov_chain_test() noexcept {
     std::uninitialized_value_construct_n(buffer2.underlying.get(), buffer2.amount_to_allocate);
 
     for(core::size k = 0; k < std::min(std::numeric_limits<core::size>::max(), core::size(300)); ++k) {
+#if 0
         auto &&_ = buffer1.multiply(buffer2.in_place_allocator(), m0);
+#else
+        auto &&_ = buffer1.multiply(core::alloc::adapt(buffer2.underlying.get(), buffer2.underlying.extent), m0);
+#endif
         std::swap(buffer1, buffer2);
 
         {

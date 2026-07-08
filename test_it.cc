@@ -1,4 +1,11 @@
-#include "dynamic_array.hpp"
+#include "core/allocator.hpp"
+#include "core/pool.hpp"
+#include "core/core.hpp"
+#include "core/defer.hpp"
+#include "core/matrix.hpp"
+#include "core/memptr.hpp"
+#include "core/string.hpp"
+
 #include <string>
 #include <functional>
 #ifndef NDEBUG
@@ -90,52 +97,8 @@ always_assert_(bool condition, [[maybe_unused]] std::string_view words) {
 }
 
 void
-access_test () {
-#ifndef NDEBUG
-    (std :: cout << __PRETTY_FUNCTION__) .put('\n');
-#endif
-
-    darray <int> nums;
-    nums .deb (1) .deb (2) .deb (3);
-
-    always_assert (nums[0] == 1);
-    always_assert (nums[1] == 2);
-    always_assert (nums[2] == 3);
-
-    darray <int> nums2;
-    nums2 .deb (1) .deb(25) .deb(1);
-
-    [](darray <int> const & arr) {
-        always_assert (arr [1] == 25);
-    } (nums2);
-
-    auto && test = [](darray <int> arr) {
-        always_assert (arr [1] == 25);
-    };
-    
-    test (nums2);
-    test (std :: move (nums2));
-}
-
-void
-const_test() {
-#ifndef NDEBUG
-    (std :: cout << __PRETTY_FUNCTION__) .put('\n');
-#endif
-
-    darray <int> nums (1, 2, 3);
-
-    const int x = 11;
-    nums.pb(x);
-
-    [](darray<int> const arr) {
-        always_assert(arr[3] == 11);
-    }(nums);
-}
-
-void
-arena_test() {
-    auto alloc = core::arena(core::kilobyte);
+pool_test() {
+    auto alloc = core::pool(core::kilobyte);
     decltype(auto) x = alloc.allocate<int>(1);
     decltype(auto) y = alloc.allocate<int>(1);
     decltype(auto) z = alloc.allocate<std::string>(1);
@@ -156,8 +119,8 @@ arena_test() {
 }
 
 [[nodiscard]] consteval bool
-arena_ub_test() {
-    auto alloc = core::stack_typed_allocator<int,256>();
+pool_ub_test() {
+    auto alloc = core::alloc::typed<int,256>();
     decltype(auto) x = alloc.allocate(1);
     std::construct_at(x, 23);
     assert(*x == 23);
@@ -166,9 +129,9 @@ arena_ub_test() {
 }
 
 void
-arena_test2() {
+pool_test2() {
     static constexpr std::size_t CAPACITY(1024);
-    static auto storage = core::arena_loud<core::stack_byte_allocator<std::byte,CAPACITY>>(CAPACITY, "tests/fibbo_cache_out.out");
+    static auto storage = core::pool_loud<core::alloc::byte<std::byte,CAPACITY>>(CAPACITY, "tests/fibbo_cache_out.out");
     storage.reset();
 
     static auto fib = std::function<int(int)>(nullptr);
@@ -215,27 +178,27 @@ arena_test2() {
 template<typename T>
 using no_op_t = decltype([](T){});
 
-void arena_loud_test() {
-    auto arena1 = core::arena_loud<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte, "tests/arena_loud0.out");
-    assert(arena1.allocate<std::string>(1));
+void pool_loud_test() {
+    auto pool1 = core::pool_loud<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte, "tests/pool_loud.out");
+    assert(pool1.allocate<std::string>(1));
     
     std::unique_ptr<std::string,no_op_t<std::string*>> ptr;
 
-    ptr.reset(arena1.allocate<std::string>(1));
+    ptr.reset(pool1.allocate<std::string>(1));
     std::construct_at(ptr.get(), "Carter Aitken");
     assert(*ptr == "Carter Aitken");
     std::destroy_at(ptr.get());
 
-    arena1.reset();
-    ptr.reset(arena1.allocate<std::string>(1));
+    pool1.reset();
+    ptr.reset(pool1.allocate<std::string>(1));
     new(ptr.get()) std::string("Carter Aitken2");
     ptr->operator+=("[ADDON!]");
 
-    fmt::ostream out = fmt::output_file("tests/arena_loud.out");
+    fmt::ostream out = fmt::output_file("tests/pool_loud.out");
     out.print("{}\n", *ptr);
     out.close();
 
-    core::run_test("arena_loud");
+    core::run_test("pool_loud");
     
     std::destroy_at(ptr.get());
 }
@@ -258,7 +221,7 @@ void leak_test() {
 
 void
 string_test() {
-    using core_string = std::basic_string<char,std::char_traits<char>, core::stack_byte_resetting_allocator<char,64>>;
+    using core_string = std::basic_string<char,std::char_traits<char>, core::alloc::resetting<char,64>>;
     auto str0 = core_string("Carter Aitken");
     for(auto i [[maybe_unused]] : std::ranges::views::iota(0zu,10zu)) {
         if(str0.capacity() * 2 > 64) break;
@@ -266,7 +229,7 @@ string_test() {
         str0 += nums;
     }
 
-    auto alloc = core::arena_loud<core::stack_byte_allocator<std::byte,1024>>(1024, "logs/string_test_allocator.log");
+    auto alloc = core::pool_loud<core::alloc::byte<std::byte,1024>>(1024, "logs/string_test_allocator.log");
     decltype(auto) str1 = alloc.allocate<core_string>(1);
     std::construct_at(str1, "Carter Aitken");
     *str1 += "[SUPRISE!]";
@@ -279,23 +242,8 @@ string_test() {
 }
 
 void
-general_usage() {
-    auto memory = core::arena<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte);
-    auto name = std::unique_ptr<core::capstr<core::decabyte>,no_op_t<core::capstr<core::decabyte>*>>();
-    name.reset(memory.allocate<core::capstr<core::decabyte>>(1));
-    std::construct_at(name.get(), "Carter Aitken");
-    name->operator+=("[[]][=][[]]->int[][[]]{} is valid cpp");
-    fmt::output_file("tests/general_usage.out").print("{:?}\n", *name);
-    std::destroy_at(name.get());
-
-    auto name2 = core::capstr<core::hectobyte>("Carter Aitken");
-
-    core::run_test("general_usage");
-}
-
-void
 strings() {
-    auto memory = core::stack_byte_allocator<char,core::decabyte>();
+    auto memory = core::alloc::byte<char,core::decabyte>();
 //  auto memory = std::allocator<char>();
     core::string name;
     name.allocate(memory);
@@ -316,26 +264,26 @@ strings() {
     fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.size(), name.capacity());
     name.deallocate(memory);
 
-    auto nofree_memory = core::arena_loud<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte, "logs/nofree_memory.log");
-    auto char_arena = nofree_memory.adapt<char>();
+    auto nofree_memory = core::pool_loud<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte, "logs/nofree_memory.log");
+    auto char_pool = nofree_memory.adapt<char>();
     core::string words;
     // Here note we haven't allocated our string yet, but since append
     // is passed an allocator, it's reasonable to assume it can allocate an
     // initial buffer.
-    if(!words.append(char_arena, std::string_view("int main(void) { return EXIT_SUCCESS; }")).payload.is_valid()) {
+    if(!words.append(char_pool, std::string_view("int main(void) { return EXIT_SUCCESS; }")).payload.is_valid()) {
         assert(false && "Bad Alloc!");
     }
     fmt::print("words == {:?}\n", words.c_str());
 
     std::ranges::for_each(
         std::ranges::views::iota(core::size(0), core::kilobyte),
-        [&words, &char_arena](core::size i [[maybe_unused]]) {
-            words.append(char_arena, std::string_view("."));
+        [&words, &char_pool](core::size i [[maybe_unused]]) {
+            words.append(char_pool, std::string_view("."));
         }
     );
     assert(words.payload.is_valid() && "shortting seems to be working!");
     fmt::print("word.size() == {}; word.capacity() == {}\n", words.size(), words.capacity());
-    // should be about 64 bytes left in char_arena
+    // should be about 64 bytes left in char_pool
     int *num = nofree_memory.allocate<int>(core::size(1));
     *num = 32;
     fmt::print("look! i got a num! -> {} <- !!! yay!\n", *num);
@@ -403,14 +351,14 @@ void
 matrix_test() {{
     auto alloc = std::allocator<double>();
 
-    auto m0 = core::matrix<typename decltype(alloc)::value_type, 2, 2>();
+    auto m0 = core::math::matrix<typename decltype(alloc)::value_type, 2, 2>();
     m0.underlying.allocate(alloc, m0.amount_to_allocate);
     std::uninitialized_value_construct_n(m0.underlying.payload, m0.amount_to_allocate);
 
     m0.at(0,0) = 2.0;
     m0.at(1,1) = 1.0;
 
-    auto m1 = core::matrix<typename decltype(alloc)::value_type, 2, 3>();
+    auto m1 = core::math::matrix<typename decltype(alloc)::value_type, 2, 3>();
     m1.underlying.allocate(alloc, m1.amount_to_allocate);
     std::uninitialized_value_construct_n(m1.underlying.payload, m1.amount_to_allocate);
 
@@ -435,9 +383,9 @@ matrix_test() {{
     m1.underlying.deallocate(alloc);
     m2.underlying.deallocate(alloc);
 } {
-    auto alloc = core::arena<core::stack_byte_allocator<std::byte,core::kilobyte>>(core::kilobyte);
+    auto alloc = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte);
     using field = double;
-    auto m0 = core::matrix<field, 2, 2>();
+    auto m0 = core::math::matrix<field, 2, 2>();
     m0.underlying.allocate(alloc.adapt<field>(), m0.amount_to_allocate);
     m0.at(0,0) = 3.0;
     m0.at(0,1) = 4.0;
@@ -459,46 +407,92 @@ matrix_test() {{
 }}
 
 void markov_chain_test() noexcept {
-    auto arena = core::arena_loud<core::stack_byte_allocator<std::byte,core::megabyte>>(core::megabyte, "logs/markov_chain_arena.log");
+    auto pool = core::pool_loud<core::alloc::byte<std::byte,core::megabyte>>(core::megabyte, "logs/markov_chain_pool.log");
     using field = double;
-    auto m0 = core::matrix<field, 5, 5>();
-    m0.underlying.allocate(arena.adapt<field>(), m0.amount_to_allocate);
+    auto m0 = core::math::matrix<field, 5, 5>();
+    m0.underlying.allocate(pool.adapt<field>(), m0.amount_to_allocate);
+    std::uninitialized_value_construct_n(m0.underlying.get(), m0.amount_to_allocate);
 
+#if 0
     for(core::size i = 0; i < m0.row_count; ++i) {
         for(core::size j = 0; j < m0.col_count; ++j) {
             if(i != j) continue;
-
+            
             m0.at(i, core::posisub(j, core::size(1), m0.col_count)) = 0.5;
             m0.at(i, core::posimod(j + 1, m0.col_count)) = 0.5;
         }
     }
+#elif 0
+    for(core::size i = 0; i < m0.row_count; ++i) {
+        for(core::size j = 0; j < m0.col_count; ++j) {
+            if(i != j) continue;
+            
+            m0.at(i, core::posimod(j + 1, m0.col_count)) = 1;
+        }
+    }
+    m0.at(0, 0) = 0.5;
+    m0.at(0, 1) = 1.0 - m0.at(0,0);
+#else
+    for(core::size i = 0; i < m0.row_count; ++i) {
+        for(core::size j = 0; j < m0.col_count; ++j) {
+            m0.at(i,j) = std::pow(0.5, static_cast<field>(j + 1));
+        }
+        m0.at(i,m0.col_count - 1) = m0.at(i,m0.col_count - 2);
+    }
+#endif
+
+    fmt::print("initial markov input:\n{}\n", m0.format(pool.adapt<char>()).payload_or("(nil)"));
     
-    decltype(m0) buffer; 
-    buffer.underlying.allocate(arena.adapt<field>(), buffer.amount_to_allocate);
+    auto dedicated_printing_alloc = core::pool<core::alloc::byte<std::byte,core::kilobyte * 10>>(core::kilobyte*10);
+
+    decltype(m0) buffer1;
+    decltype(m0) buffer2;
+
+    buffer1.underlying.allocate(pool.adapt<field>(), buffer1.amount_to_allocate);
+    std::uninitialized_value_construct_n(buffer1.underlying.get(), buffer1.amount_to_allocate);
+    for(core::size i = 0; i < buffer1.row_count; ++i) {
+        buffer1.at(i,i) = field(1);
+    }
+
+    buffer2.underlying.allocate(pool.adapt<field>(), buffer2.amount_to_allocate);
+    std::uninitialized_value_construct_n(buffer2.underlying.get(), buffer2.amount_to_allocate);
+
     for(core::size k = 0; k < std::min(std::numeric_limits<core::size>::max(), core::size(300)); ++k) {
-        auto &&_ = m0.multiply(buffer.in_place_allocator(), m0);
-        std::swap(buffer, m0);
+        auto &&_ = buffer1.multiply(buffer2.in_place_allocator(), m0);
+        std::swap(buffer1, buffer2);
+
+        {
+            dedicated_printing_alloc.reset();
+            core::string<> to_print = buffer1.format(dedicated_printing_alloc.adapt<core::string<>::char_t>());
+            fmt::print("m0^({}) =>\n{}\n", k, to_print.payload_or("(nil)"));
+        }
 
         field col_sum = 0.0;
-        for(core::size j = 0; j < m0.row_count; ++j) col_sum += m0.at(j, 0);
+        for(core::size j = 0; j < buffer1.col_count; ++j) col_sum += buffer1.at(0, j);
         constexpr static field tolerance = 0.0000001;
         if(std::abs(col_sum - field(1)) >= tolerance) {
             fmt::print("x == {}, leading to imprescision at k == {} with tolerance = {}\n", col_sum, k, tolerance);
             break;
         }
     }
+    std::swap(buffer1, m0);
     
 #if 0
-    auto strg = m0.format(arena.adapt<char>());
+    auto strg = m0.format(pool.adapt<char>());
     fmt::output_file("logs/markov_result.log")
     .print(
         "m0 big, str size is {}\n{}\n",
         strg.size(), strg.payload_or("nil")
     );
-#else
+#elif 0
     fmt::output_file("logs/markov_result.log")
     .print("{}\n",
-        m0.format(arena.adapt<core::string<>::char_t>())
+        m0.format(pool.adapt<core::string<>::char_t>())
+        .payload_or("nil")
+    );
+#else
+    fmt::print("markov result =>\n{}\n",
+        m0.format(pool.adapt<core::string<>::char_t>())
         .payload_or("nil")
     );
 #endif
@@ -506,9 +500,9 @@ void markov_chain_test() noexcept {
 
 constexpr auto
 memptr_testing2() noexcept -> void {
-    auto arena = core::arena<std::allocator<std::byte>>(core::hectobyte);
-    auto character_allocator = arena.adapt<char>();
-    auto name = core::memptr<core::string<>>().allocate(arena.adapt<core::string<>>());
+    auto pool = core::pool<std::allocator<std::byte>>(core::hectobyte);
+    auto character_allocator = pool.adapt<char>();
+    auto name = core::memptr<core::string<>>().allocate(pool.adapt<core::string<>>());
     core::construct_at(name).append(character_allocator, "[CA!]");
     fmt::print("name [gain] => {}\n", name->payload_or("(nil)"));
     core::destroy_at(name);
@@ -547,9 +541,10 @@ monad_testing() -> void {
     auto square = [](core::i32 num) -> core::i32 {
         return num * num;
     };
-
-    auto print_num = [](core::i32 num) -> core::i32 {
-        fmt::print("num == {}\n", num);
+    
+    auto file = fmt::output_file("logs/monad_testing.log");
+    auto print_num = [&file](core::i32 num) -> core::i32 {
+        file.print("num == {}\n", num);
         return num;
     };
 
@@ -574,8 +569,8 @@ monad_testing() -> void {
 }
 
 auto matrix_fun() noexcept -> void {
-    auto arena = core::arena<
-        core::stack_byte_allocator<
+    auto pool = core::pool<
+        core::alloc::byte<
             std::byte,
             core::kilobyte
         >
@@ -583,12 +578,12 @@ auto matrix_fun() noexcept -> void {
     
     using field = float;
 
-    auto A = core::matrix<field, 5, 5>();
-    A.underlying.allocate(arena.adapt<field>(), A.amount_to_allocate);
+    auto A = core::math::matrix<field, 5, 5>();
+    A.underlying.allocate(pool.adapt<field>(), A.amount_to_allocate);
     std::uninitialized_value_construct_n(A.underlying.get(), A.underlying.extent);
 
-    auto x = core::matrix<field, 5, 1>();
-    x.underlying.allocate(arena.adapt<field>(), x.amount_to_allocate);
+    auto x = core::math::matrix<field, 5, 1>();
+    x.underlying.allocate(pool.adapt<field>(), x.amount_to_allocate);
     std::uninitialized_value_construct_n(x.underlying.get(), x.underlying.extent);
    
     static_assert(std::forward_iterator<core::memptr<field>>); 
@@ -596,17 +591,27 @@ auto matrix_fun() noexcept -> void {
     static_assert(std::ranges::view<core::memptr<field>>); 
     for(core::size n = 0; field &i: x.underlying
     | std::views::filter([&n](field) mutable { ++n; return n % 2 == 0; })) {
-        fmt::print("loop!\n");
         i = static_cast<field>(n * n + 1);
     }
 
-    fmt::print("{}\n", x.format(arena.adapt<char>()).payload_or("(nil)"));
+    for(core::size i = 0; i < A.row_count; ++i) {
+        for(core::size j = 0; j < A.col_count; ++j) {
+            A.at(i,j) = static_cast<field>(i * j + 1);
+        }
+    }
+
+    auto y = A.multiply(pool.adapt<field>(), x);
+    
+    auto file = fmt::output_file("logs/matricies_and_ranges.log");
+    file.print("x =>\n{}\n", x.format(pool.adapt<char>()).payload_or("(nil)"));
+    file.print("A =>\n{}\n", A.format(pool.adapt<char>()).payload_or("(nil)"));
+    file.print("A@x =>\n{}\n", y.format(pool.adapt<char>()).payload_or("(nil)"));
 }
 
 
-auto memptr_ranges = [] {
-    auto arena = core::arena<
-        core::stack_byte_allocator<
+constexpr auto memptr_ranges = [] {
+    auto pool = core::pool<
+        core::alloc::byte<
             std::byte,
             core::kilobyte
         >
@@ -615,7 +620,7 @@ auto memptr_ranges = [] {
     core::memptr<std::vector<core::i32>> valid;
     core::memptr<std::vector<core::i32>> invalid;
 
-    valid.allocate(arena.adapt<decltype(valid)::value_type>(), 1);
+    valid.allocate(pool.adapt<decltype(valid)::value_type>(), 1);
     core::construct_at(valid);
 
     auto pb = [](core::i32 num) {
@@ -641,23 +646,17 @@ auto memptr_ranges = [] {
     std::ranges::for_each(invalid, print_vector);
     
     core::destroy_at(valid);
-    // valid.deallocate(arena.adapt<decltype(valid)::value_type>());
 };
 
 auto main() noexcept -> core::i32 {
-    access_test();
-    const_test();
-
-    static_assert(arena_ub_test());
-    arena_test2();
-    arena_test2();
-    arena_test2();
-    arena_loud_test();
+    static_assert(pool_ub_test());
+    pool_test2();
+    pool_test2();
+    pool_test2();
+    pool_loud_test();
     leak_test();
 
     string_test();
-
-    general_usage();
 
     strings();
 
@@ -665,8 +664,8 @@ auto main() noexcept -> core::i32 {
 
     memptr_tests<
         core::memptr<core::string<>>,
-        core::stack_byte_allocator<core::string<>,core::kilobyte>,
-        core::stack_byte_allocator<char,core::kilobyte>
+        core::alloc::byte<core::string<>,core::kilobyte>,
+        core::alloc::byte<char,core::kilobyte>
     >("tests/memptr-stack_alloc.out");
     core::run_test("memptr-stack_alloc");
 
@@ -686,33 +685,33 @@ auto main() noexcept -> core::i32 {
 
     memptr_tests<
         core::memptr_unsafe<core::string<>>,
-        core::stack_byte_allocator<core::string<>,core::kilobyte>,
-        core::stack_byte_allocator<char,core::kilobyte>
+        core::alloc::byte<core::string<>,core::kilobyte>,
+        core::alloc::byte<char,core::kilobyte>
     >("tests/memptr_unsafe-stack_alloc.out");
     core::run_test("memptr_unsafe-stack_alloc");
 
     memptr_tests<
         core::memptr<core::string<>>,
-        core::stack_byte_allocator<core::string<>,core::dualbyte>,
-        core::stack_byte_allocator<char,core::kilobyte>
+        core::alloc::byte<core::string<>,core::dualbyte>,
+        core::alloc::byte<char,core::kilobyte>
     >("tests/memptr-no_memory_for_string_alloc.out");
 
     memptr_tests<
         core::memptr<core::string<>>,
-        core::stack_byte_allocator<core::string<>,core::dualbyte>,
-        core::stack_byte_allocator<char,core::dualbyte>
+        core::alloc::byte<core::string<>,core::dualbyte>,
+        core::alloc::byte<char,core::dualbyte>
     >("tests/memptr-no_memory_for_char_alloc.out");
 
     memptr_tests<
         core::memptr_unsafe<core::string<>>,
-        core::stack_byte_allocator<core::string<>,core::kilobyte>,
-        core::stack_byte_allocator<char,core::dualbyte>
+        core::alloc::byte<core::string<>,core::kilobyte>,
+        core::alloc::byte<char,core::dualbyte>
     >("tests/memptr_unsafe-no_memory_for_char_alloc.out");
 
     memptr_tests<
         core::memptr_unsafe<core::string<>>,
-        core::stack_byte_allocator<core::string<>,core::size(1)>,
-        core::stack_byte_allocator<char,core::hectobyte>
+        core::alloc::byte<core::string<>,core::size(1)>,
+        core::alloc::byte<char,core::hectobyte>
     >("tests/memptr_unsafe-no_memory_for_string_alloc.out");
     
     struct bad_string_allocator {
@@ -724,7 +723,7 @@ auto main() noexcept -> core::i32 {
     memptr_tests<
         core::memptr_unsafe<core::string<>>,
         bad_string_allocator,
-        core::stack_byte_allocator<char,core::hectobyte>
+        core::alloc::byte<char,core::hectobyte>
     >("tests/memptr_unsafe-bad_allocator.out");
 
     matrix_test();
@@ -737,7 +736,7 @@ auto main() noexcept -> core::i32 {
 
     monad_testing();
 
-    arena_test();
+    pool_test();
 
     matrix_fun();
 

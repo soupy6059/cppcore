@@ -1,15 +1,9 @@
-#include "dynamic_array.hpp"
+#include "core/core.hpp"
 
-int do_stuff() {
-    darray<int> nums;
-    nums.deb(1).deb(2).deb(3);
-    int *begin = reinterpret_cast<int*>(nums.data);
-    int sum = 0;
-    for(int *num = begin; num < begin + nums.length; ++num) {
-        sum += *num;
-    }
-    return sum;
-}
+#include <fstream>
+#include <string>
+#include <cassert>
+#include "fmt/core.h"
 
 void core::run_test(std::string_view testname) noexcept {
     std::string expect_name = "tests/";
@@ -22,8 +16,10 @@ void core::run_test(std::string_view testname) noexcept {
     auto expect = std::ifstream(expect_name);
     auto out = std::ifstream(out_name);
 
-    assert(expect && "Bad Expect Name");
-    assert(out && "Bad Out Name");
+    if(!expect || !out) {
+        fmt::print("expect => [{}], out => [{}]\n", expect_name, out_name);
+        assert(false && "BAD EXPECT OR BAD OUT");
+    }
 
     std::string out_tester;
     std::string expect_tester;
@@ -32,11 +28,4 @@ void core::run_test(std::string_view testname) noexcept {
         assert(out_tester == expect_tester);
     }
     assert(!((out >> out_tester) || (expect >> expect_tester)));
-}
-
-core::defer::defer(decltype(defered) defered_) noexcept
-: defered(std::move(defered_)) {}
-
-core::defer::~defer() noexcept {
-    defered();
 }

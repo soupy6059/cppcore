@@ -676,6 +676,40 @@ auto testing_default_pool() {
 #undef LOG
 }
 
+auto string_buffers() {
+    auto pool = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(3 * core::hectobyte);
+    auto chpool = pool.adapt<core::string<>::char_t>();
+    auto s0 = core::string<>().allocate(chpool, core::hectobyte);
+    auto buffer1 = core::string<>().allocate(chpool, core::hectobyte);
+    auto buffer2 = core::string<>().allocate(chpool, core::hectobyte);
+
+    assert(s0.payload.is_valid() && buffer1.payload.is_valid() && buffer2.payload.is_valid());
+    assert(s0.capacity() == core::hectobyte && buffer1.capacity() == core::hectobyte && buffer2.capacity() == core::hectobyte);
+
+    s0.append(core::alloc::adapt(s0.payload), '#');
+    assert(s0.length() == 1);
+
+    for(core::i32 i = 0; i < 20; ++i) {
+        core::string<>::concat(core::alloc::adapt(buffer2.payload),  buffer1, s0);
+        buffer2.len = buffer1.len + s0.len;
+        std::swap(buffer1, buffer2);
+
+        assert(std::strlen(buffer1.data()) == buffer1.length());
+        assert(std::strlen(buffer2.data()) == buffer2.length());
+        assert(std::strlen(s0.data()) == s0.length());
+    }
+    fmt::print("buffer1 => {}\n", buffer1.c_str());
+    fmt::print("s0 => {}\n", s0.c_str());
+
+    core::memptr<core::i32> x;
+    x.allocate(std::allocator<core::i32>());
+    core::memptr<core::i32> y;
+    y.allocate(core::alloc::adapt(x));
+    *x = 32;
+    assert(*x == *y);
+    x.deallocate(std::allocator<core::i32>());
+}
+
 auto main() noexcept -> core::i32 {
     static_assert(pool_ub_test());
     pool_test2();
@@ -771,6 +805,8 @@ auto main() noexcept -> core::i32 {
     memptr_ranges();
 
     testing_default_pool();
+
+    string_buffers();
 
     return EXIT_SUCCESS;
 }

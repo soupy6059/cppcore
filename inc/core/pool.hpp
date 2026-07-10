@@ -2,6 +2,11 @@
 #ifndef POOL__
 #define POOL__
 
+#include "fmt/core.h"
+#include <typeinfo>
+#include <memory>
+#include "fmt/os.h"
+
 namespace core {
 
 template<typename Alloc = std::allocator<std::byte>>
@@ -10,15 +15,15 @@ struct pool {
     using size_type = Alloc::size_type;
     using difference_type = Alloc::difference_type;
 
-    value_type *payload;
-    value_type *current;
-    value_type *capacity;
+    void *payload;
+    void *current;
+    void *capacity;
     Alloc alloc{};
     
     constexpr pool(Alloc::size_type N) {
-        payload = alloc.allocate(N);
+        payload = reinterpret_cast<void*>(alloc.allocate(N));
         current = payload;
-        capacity = payload + N;
+        capacity = reinterpret_cast<std::byte*>(payload) + N;
     }
 
     constexpr pool &reset() {
@@ -28,13 +33,10 @@ struct pool {
 
     template<typename T> [[nodiscard]] 
     constexpr T *allocate(Alloc::size_type N) {
-        decltype(auto) saved = current;
-        current += N * sizeof(T);
-        if(current > capacity) {
-            current -= N * sizeof(T);
-            return nullptr;
-        }
-        return reinterpret_cast<T*>(saved);
+        auto size_left = reinterpret_cast<std::uintptr_t>(capacity) - reinterpret_cast<std::uintptr_t>(current);
+        if(!std::align(alignof(T), sizeof(T) * N, current, size_left)) { return nullptr; }
+        current = static_cast<std::byte*>(current) + sizeof(T) * N;
+        return reinterpret_cast<T*>(current);
     }
     
     // Provides a thin allocator film over pools.  
@@ -58,7 +60,12 @@ struct pool {
     }
 
     constexpr ~pool() noexcept {
-        alloc.deallocate(payload, static_cast<Alloc::size_type>(capacity - payload));
+        alloc.deallocate(
+            reinterpret_cast<Alloc::value_type*>(payload), 
+            static_cast<Alloc::size_type>(
+                reinterpret_cast<std::uintptr_t>(capacity) - reinterpret_cast<std::uintptr_t>(payload)
+            )
+        );
     }
 };
 
@@ -71,8 +78,10 @@ struct pool_loud: public pool<Alloc> {
 
     void print_stats() noexcept {
         out.print("\tused: {}; left: {};\n",
-            static_cast<Alloc::size_type>(this->current - this->payload),
-            static_cast<Alloc::size_type>(this->capacity - this->current)
+            reinterpret_cast<std::byte*>(this->current)
+            - reinterpret_cast<std::byte*>(this->payload),
+            reinterpret_cast<std::byte*>(this->capacity)
+            - reinterpret_cast<std::byte*>(this->current)
         );
     }
 
@@ -103,6 +112,7 @@ struct pool_loud: public pool<Alloc> {
         using size_type = Alloc::size_type;
         using difference_type = Alloc::difference_type;
         constexpr AdaptedT *allocate(size_type N) {
+            assert(parent);
             parent->out.print("pool::adaptor<{}>({}) // allocated {} bytes\n", typeid(AdaptedT).name(), N, N * sizeof(AdaptedT));
             return parent->allocate<AdaptedT>(N);
         }

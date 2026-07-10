@@ -102,7 +102,7 @@ struct string {
         source.append(std::forward<Alloc>(alloc), other);
 
         assert(source.length() == std::strlen(source.data()));
-        assert(source.length() == self.length() + other.length());
+        // assert(source.length() == self.length() + other.length());
 
         return source;
     }

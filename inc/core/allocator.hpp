@@ -51,7 +51,7 @@ struct byte {
     using difference_type = std::ptrdiff_t;
     using pointer = value_type*;
     
-    std::byte payload[cap];
+    alignas(T) std::byte payload[cap];
     std::byte *current = payload;
     
     template<typename U>

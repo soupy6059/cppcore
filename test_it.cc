@@ -149,6 +149,7 @@ pool_test2() {
 
     fib = [&](int N) -> int {
         if(static_cast<std::size_t>(N) >= CAPACITY) return std::numeric_limits<decltype(N)>::max(); // infinity!
+        if(static_cast<core::size>(N) >= results_size) return -1;
         if(N == 0) return 0;
         if(N == 1) return 1;
         if(!results) return fib(N - 1) + fib(N - 2);
@@ -170,10 +171,6 @@ pool_test2() {
             }
         );
     }
-
-    fout << "total bytes used: " << static_cast<decltype(storage)::size_type>(
-        storage.current - storage.payload
-    );
 }
 
 template<typename T>
@@ -279,7 +276,8 @@ strings() {
     std::ranges::for_each(
         std::ranges::views::iota(core::size(0), core::kilobyte),
         [&words, &char_pool](core::size i [[maybe_unused]]) {
-            words.append(char_pool, std::string_view("."));
+            // words.append(char_pool, std::string_view("."));
+            words.append(char_pool, '.');
         }
     );
     assert(words.payload.is_valid() && "shortting seems to be working!");
@@ -456,6 +454,7 @@ void markov_chain_test() noexcept {
     buffer2.underlying.allocate(pool.adapt<field>(), buffer2.amount_to_allocate);
     std::uninitialized_value_construct_n(buffer2.underlying.get(), buffer2.amount_to_allocate);
 
+    auto file = fmt::output_file("logs/markov_computing.log");
     for(core::size k = 0; k < std::min(std::numeric_limits<core::size>::max(), core::size(300)); ++k) {
         //auto &&l0 [[maybe_unused]] = buffer1.multiply(buffer2.in_place_allocator(), m0);
         auto &&g [[maybe_unused]] = buffer1.multiply(core::alloc::adapt(buffer2.underlying), m0);
@@ -464,7 +463,7 @@ void markov_chain_test() noexcept {
         {
             dedicated_printing_alloc.reset();
             core::string<> to_print = buffer1.format(dedicated_printing_alloc.adapt<core::string<>::char_t>());
-            fmt::print("m0^({}) =>\n{}\n", k, to_print.payload_or("(nil)"));
+            file.print("m0^({}) =>\n{}\n", k, to_print.payload_or("(nil)"));
         }
 
         field col_sum = 0.0;
@@ -491,7 +490,7 @@ void markov_chain_test() noexcept {
         .payload_or("nil")
     );
 #else
-    fmt::print("markov result =>\n{}\n",
+    fmt::output_file("logs/markov_result.log").print("markov result =>\n{}\n",
         m0.format(pool.adapt<core::string<>::char_t>())
         .payload_or("nil")
     );
@@ -662,7 +661,7 @@ auto testing_default_pool() {
     };
 #define LOG(X) do { log_string(#X, X); } while(false)
 
-    for(decltype(pool)::difference_type i = 0; i < pool.capacity - pool.payload; ++i) {
+    for(decltype(pool)::difference_type i = 0; i < reinterpret_cast<std::byte*>(pool.capacity) - reinterpret_cast<std::byte*>(pool.payload); ++i) {
         s0.append(pool.adapt<core::string<>::char_t>(), '#');
         s1.append(pool.adapt<core::string<>::char_t>(), '@');
     }
@@ -677,7 +676,7 @@ auto testing_default_pool() {
 }
 
 auto string_buffers() {
-    auto pool = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(3 * core::hectobyte);
+    auto pool = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte);
     auto chpool = pool.adapt<core::string<>::char_t>();
     auto s0 = core::string<>().allocate(chpool, core::hectobyte);
     auto buffer1 = core::string<>().allocate(chpool, core::hectobyte);
@@ -688,11 +687,13 @@ auto string_buffers() {
 
     s0.append(core::alloc::adapt(s0.payload), '#');
     assert(s0.length() == 1);
-
+    
+    auto storage1 = core::alloc::adapt(buffer1.payload);
+    auto storage2 = core::alloc::adapt(buffer2.payload);
     for(core::i32 i = 0; i < 20; ++i) {
-        core::string<>::concat(core::alloc::adapt(buffer2.payload),  buffer1, s0);
-        buffer2.len = buffer1.len + s0.len;
+        buffer2 = core::string<>::concat(storage2, buffer1, s0);
         std::swap(buffer1, buffer2);
+        std::swap(storage1, storage2);
 
         assert(std::strlen(buffer1.data()) == buffer1.length());
         assert(std::strlen(buffer2.data()) == buffer2.length());

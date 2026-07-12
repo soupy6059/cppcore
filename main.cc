@@ -6,6 +6,10 @@
 #include <cassert>
 #include <cstring>
 
+#defube FMTLOG(X) do {\
+    fmt::print("{:?}:\n\t{} => {}\n", __PRETTY_FUNCTION__, #X, X);\
+} while(false)
+
 void inttests() {
     auto log_file = fmt::output_file("logs/inttests.log");
     auto pool = core::pool(core::hectobyte);

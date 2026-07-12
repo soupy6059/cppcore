@@ -6,7 +6,7 @@
 #include <cassert>
 #include <cstring>
 
-#defube FMTLOG(X) do {\
+#define FMTLOG(X) do {\
     fmt::print("{:?}:\n\t{} => {}\n", __PRETTY_FUNCTION__, #X, X);\
 } while(false)
 
@@ -68,6 +68,11 @@ struct string {
         }
         return *this;
     }
+
+    template<typename Alloc> constexpr decltype(auto)
+    append(Alloc &&alloc, string<> other) noexcept {
+        return append(std::forward<Alloc>(alloc), other.underlying.get());
+    }
 };
 
 };
@@ -102,15 +107,32 @@ void devstrtest() {
     
     core::defer l2 ([&]{ name2->underlying.deallocate(chars); });
     name2->append(chars, "CARTE@__");
-    name2->append(chars, "CARTE@__");
+    name2->append(chars, "auto&&_[[]]=[=][[]]<>([[]]){}();");
     name2->append(chars, "CARTE@__");
     name2->append(chars, "CARTE@__");
 
     fmt::print("name2 => {}\n", name2->underlying.get());
 }
 
+void devstrtest2() {
+    auto pool = core::pool<core::alloc::byte<char,core::kilobyte>>(core::kilobyte);
+    auto alloc = pool.adapt<char>();
+    dev::string<> x;
+    dev::string<> y;
+    x.append(alloc, "ABCDE");
+    y.append(alloc, "FGHIJ");
+
+    x.append(alloc, y);
+    x.append(alloc, y);
+    x.append(alloc, y);
+    x.append(alloc, y);
+
+    fmt::output_file("logs/devstrtest2.log").print("x => {}\n", x.underlying.get());
+}
+
 auto main() noexcept -> core::i32 {
     devstrtest();
     inttests();
     memptrtests();
+    devstrtest2();
 }

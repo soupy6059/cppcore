@@ -16,7 +16,7 @@ function do_and_speak {
 
 do_and_speak clear
 do_and_speak rm *.a
-do_and_speak rm build/*
+do_and_speak rm objects/*
 do_and_speak rm bin/*
 do_and_speak rm tests/*.out
 do_and_speak rm vgcore*
@@ -27,7 +27,7 @@ link_fmt="${include_fmt} -L ../fmt -lfmt -no-pie"
 
 compile_source() {
     name=$(basename $1)
-    do_and_speak $compiler $opt $std $warnings $debug $include_fmt -c -Iinc/core -Iinc $src -o build/${name%.*}.o
+    do_and_speak $compiler $opt $std $warnings $debug $include_fmt -c -Iinc/core -Iinc $src -o objects/${name%.*}.o
 }
 
 for src in $(find src/*.cc)
@@ -41,7 +41,7 @@ do
 done
 
 libnames=()
-for object in $(find build/*.o)
+for object in $(find objects/*.o)
 do
     name=$(basename $object)
     libnames+=(-l${name%.*})

@@ -2,7 +2,9 @@
 #include "core/pool.hpp"
 #include "core/allocator.hpp"
 #include "core/memptr.hpp"
+#include "core/defer.hpp"
 #include <cassert>
+#include <cstring>
 
 void inttests() {
     auto log_file = fmt::output_file("logs/inttests.log");
@@ -25,7 +27,86 @@ void memptrtests() {
     log_file.print("*x => {}\n", *x);
 }
 
+namespace dev {
+
+template<typename char_t_ = char>
+struct string {
+    using char_t = char_t_;
+    core::memptr<char_t> underlying;
+    
+    [[nodiscard]] constexpr auto
+    length() noexcept {
+        return std::strlen(underlying.get());
+    }
+
+    template<typename Alloc> constexpr decltype(auto)
+    append(Alloc &&alloc, const char *const other) noexcept {
+        if(underlying.extent == 0) {
+            underlying.allocate(alloc, core::hexabyte);
+            std::memset(underlying.get(), '\0', underlying.extent);
+        }
+        auto self_len = length();
+        auto other_len = std::strlen(other);
+        
+        auto space_to_realloc = underlying.extent;
+        while(self_len + other_len + 1 >= space_to_realloc) {
+            space_to_realloc *= 2;
+        }
+
+        if(space_to_realloc != underlying.extent) {
+            underlying.reallocate(std::forward<Alloc>(alloc), space_to_realloc);
+            assert(underlying.extent >= self_len);
+            std::memset(underlying.get() + self_len, '\0', underlying.extent - self_len);
+        }
+
+        if(self_len + other_len + 1 < underlying.extent) {
+            std::memcpy(underlying.get() + self_len, other, other_len);
+        }
+        return *this;
+    }
+};
+
+};
+
+void devstrtest() {
+    //auto chars = core::alloc::byte<char,core::kilobyte>();
+    auto chars = std::allocator<char>();
+    dev::string<> name;
+    std::memset(name.underlying.get(), '\0', name.underlying.extent);
+    name.append(chars, "CARTER__");
+    name.append(chars, "CARTER__");
+
+    fmt::print("name => {}\n", name.underlying.get());
+    fmt::print("\tlength() => {}\n\tcapacity => {}\n",
+        name.length(),
+        name.underlying.extent
+    );
+
+    fmt::print("bytes:\n");
+    for(core::size i = 0; i < name.underlying.extent; ++i) {
+        fmt::print("\t[{}] => {:?}\n", i, name.underlying[i]);
+    }
+
+    name.underlying.deallocate(chars);
+
+    core::memptr<dev::string<>> name2;
+    name2.allocate(std::allocator<dev::string<>>());
+    core::defer l0 ([&]{ name2.deallocate(std::allocator<dev::string<>>()); });
+
+    std::construct_at(name2.get());
+    core::defer l1 ([&]{ std::destroy_at(name2.get()); });
+    
+    core::defer l2 ([&]{ name2->underlying.deallocate(chars); });
+    name2->append(chars, "CARTE@__");
+    name2->append(chars, "CARTE@__");
+    name2->append(chars, "CARTE@__");
+    name2->append(chars, "CARTE@__");
+
+    fmt::print("name2 => {}\n", name2->underlying.get());
+}
+
 auto main() noexcept -> core::i32 {
+    devstrtest();
     inttests();
     memptrtests();
 }

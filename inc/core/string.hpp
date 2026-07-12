@@ -69,7 +69,6 @@ struct string {
         }
         if(N == 0) { return *this; }
         core::size cap_new = payload.extent;
-        // TODO: what if cap_new == 0? then inf loop?
         while(cap_new - len < N + core::size(1)) { cap_new *= 2; }
         if(cap_new != payload.extent) {
             decltype(payload) payload_new;

@@ -141,9 +141,103 @@ void devstrtest2() {
     fmt::output_file("logs/devstrtest2.log").print("x => {}\n", x.underlying.get());
 }
 
+namespace dev {
+
+template<typename T>
+struct safeptr {
+    constexpr decltype(auto) allocate(auto &&alloc, core::size amount) noexcept {
+        payload = std::forward<decltype(alloc)>(alloc).allocate(amount);
+        extent = payload? amount : 0;
+        return *this;
+    }
+
+    constexpr decltype(auto) deallocate(auto &&alloc) noexcept {
+        assert(!constructed);
+        std::forward<decltype(alloc)>(alloc).deallocate(payload, extent);
+        payload = nullptr;
+        extent = 0;
+        constructed = false;
+        return *this;
+    }
+
+    constexpr decltype(auto) construct_each(auto &&...args) noexcept {
+        for(core::size i = 0; i < extent; ++i) {
+            std::construct_at(payload + i, std::forward<decltype(args)>(args)...);
+        }
+        constructed = true;
+        return *this;
+    }
+
+    constexpr decltype(auto) destroy_each() noexcept {
+        for(core::size i = 0; i < extent; ++i) {
+            std::destroy_at(payload + i);
+        }
+        constructed = false;
+        return *this;
+    }
+
+    constexpr decltype(auto) for_each(auto &&callable) & noexcept {
+        for(core::size i = 0; i < extent; ++i) {
+            callable(payload[i]);
+        }
+        return *this;
+    }
+
+    constexpr decltype(auto) for_each(auto &&callable) && noexcept {
+        assert(constructed);
+        for(core::size i = 0; i < extent; ++i) {
+            callable(std::move(payload[i]));
+        }
+        return *this;
+    }
+
+    constexpr decltype(auto) map(auto &&callable) noexcept {
+        for(core::size i = 0; i < extent; ++i) {
+            payload[i] = callable(payload[i]);
+        }
+        return *this;
+    }
+    
+    template<typename U>
+    constexpr safeptr<U> transform(auto &&alloc_for_t, auto &&alloc_for_u, auto &&callable) noexcept {
+        safeptr<U> nextptr;
+        nextptr.allocate(std::forward<decltype(alloc_for_u)>(alloc_for_u), extent);
+        nextptr.construct_each();
+
+        core::size i = 0;
+        nextptr.map([&](U&) { return callable(payload[i++]); });
+
+        destroy_each();
+        deallocate(std::forward<decltype(alloc_for_t)>(alloc_for_t));
+
+        return nextptr;
+    }
+
+private:
+    T *payload = nullptr;
+    core::size extent = 0;
+    bool constructed = false;
+};
+
+};
+
+auto devsafeptr1() {
+    auto alloc = std::allocator<core::i32>();
+    auto alloc_d = std::allocator<double>();
+    dev::safeptr<core::i32>()
+        .allocate(alloc, 5)
+        .construct_each()
+        .map([](int){ return 32; })
+        .transform<double>(alloc, alloc_d, [](int x) { return static_cast<double>(x) + 0.2332; })
+        .for_each([](double &&x) { fmt::print("{}\n", x); })
+        .destroy_each()
+        .deallocate(alloc_d);
+}
+
 auto main() noexcept -> core::i32 {
     devstrtest();
     inttests();
     memptrtests();
     devstrtest2();
+    devsafeptr1();
 }

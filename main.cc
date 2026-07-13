@@ -44,7 +44,7 @@ struct string {
     }
 
     template<typename Alloc> constexpr decltype(auto)
-    append(Alloc &&alloc, const char *const other) noexcept {
+    append(Alloc &&alloc, const char_t *const other) noexcept {
         if(underlying.extent == 0) {
             underlying.allocate(alloc, core::hexabyte);
             std::memset(underlying.get(), '\0', underlying.extent);
@@ -59,7 +59,7 @@ struct string {
 
         if(space_to_realloc != underlying.extent) {
             underlying.reallocate(std::forward<Alloc>(alloc), space_to_realloc);
-            assert(underlying.extent >= self_len);
+            assert(underlying.extent >= self_len); // sanity and bad math check
             std::memset(underlying.get() + self_len, '\0', underlying.extent - self_len);
         }
 
@@ -73,11 +73,18 @@ struct string {
     append(Alloc &&alloc, string<> other) noexcept {
         return append(std::forward<Alloc>(alloc), other.underlying.get());
     }
+
+    template<typename Alloc> constexpr decltype(auto) append(Alloc &&alloc, char_t ch) noexcept {
+        char_t buffer[] = { ch, 0 };
+        return append(std::forward<Alloc>(alloc), buffer);
+    }
 };
 
 };
 
 void devstrtest() {
+    auto logfile = fmt::output_file("logs/devstrtest.log");
+
     //auto chars = core::alloc::byte<char,core::kilobyte>();
     auto chars = std::allocator<char>();
     dev::string<> name;
@@ -85,15 +92,15 @@ void devstrtest() {
     name.append(chars, "CARTER__");
     name.append(chars, "CARTER__");
 
-    fmt::print("name => {}\n", name.underlying.get());
-    fmt::print("\tlength() => {}\n\tcapacity => {}\n",
+    logfile.print("name => {}\n", name.underlying.get());
+    logfile.print("\tlength() => {}\n\tcapacity => {}\n",
         name.length(),
         name.underlying.extent
     );
 
-    fmt::print("bytes:\n");
+    logfile.print("bytes:\n");
     for(core::size i = 0; i < name.underlying.extent; ++i) {
-        fmt::print("\t[{}] => {:?}\n", i, name.underlying[i]);
+        logfile.print("\t[{}] => {:?}\n", i, name.underlying[i]);
     }
 
     name.underlying.deallocate(chars);
@@ -111,7 +118,7 @@ void devstrtest() {
     name2->append(chars, "CARTE@__");
     name2->append(chars, "CARTE@__");
 
-    fmt::print("name2 => {}\n", name2->underlying.get());
+    logfile.print("name2 => {}\n", name2->underlying.get());
 }
 
 void devstrtest2() {
@@ -119,7 +126,11 @@ void devstrtest2() {
     auto alloc = pool.adapt<char>();
     dev::string<> x;
     dev::string<> y;
-    x.append(alloc, "ABCDE");
+    x.append(alloc, 'A');
+    x.append(alloc, 'B');
+    x.append(alloc, 'C');
+    x.append(alloc, 'D');
+    x.append(alloc, 'E');
     y.append(alloc, "FGHIJ");
 
     x.append(alloc, y);

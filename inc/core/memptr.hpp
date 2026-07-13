@@ -131,18 +131,23 @@ struct memptr: public memptr_unsafe<T>, public std::ranges::view_interface<mempt
 
     template<typename Alloc> constexpr decltype(auto)
     reallocate(Alloc &&alloc, size N) noexcept {
-        size to_copy = std::min(N, this->extent);
+#if 1
         memptr old = *this;
-
         allocate(alloc, N);
         if(!this->payload) {
-            assert(this->extent == 0);
             std::swap(old,*this);
             return *this;
         }
 
+        size to_copy = std::min(old.extent, this->extent);
         std::memcpy(this->get(), old.get(), to_copy);
         old.deallocate(std::forward<Alloc>(alloc));
+#else
+        memptr new_data = allocate(alloc, N);
+        std::memcpy(new_data.get(), this->get(), std::min(new_data.extent, this->extent));
+        std::swap(new_data, *this);
+        new_data.deallocate(std::forward<Alloc>(alloc));
+#endif
         
         return *this;
     }

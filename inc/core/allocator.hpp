@@ -121,12 +121,9 @@ struct adapt {
     pointer payload;
     size_type extent;
 
-    constexpr adapt(pointer payload_, size_type extent_) noexcept
-        : payload(payload_), extent(extent_) {}
+    constexpr adapt(pointer payload_, size_type extent_) noexcept : payload(payload_), extent(extent_) {}
 
-    template<memptrish weird_pointer> constexpr
-    adapt(weird_pointer &&ptr) noexcept
-        : payload(ptr.get()), extent(ptr.extent) {}
+    template<memptrish weird_pointer> constexpr adapt(weird_pointer &&ptr) noexcept : payload(ptr.get()), extent(ptr.extent) {}
 
     template<typename U>
     struct rebind {

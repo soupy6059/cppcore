@@ -227,9 +227,9 @@ auto devsafeptr1() {
     dev::safeptr<core::i32>()
         .allocate(alloc, 5)
         .construct_each()
-        .map([](int){ return 32; })
-        .transform<double>(alloc, alloc_d, [](int x) { return static_cast<double>(x) + 0.2332; })
-        .for_each([](double &&x) { fmt::print("{}\n", x); })
+        .map([](auto){ return 32; })
+        .transform<double>(alloc, alloc_d, [](auto x) { return static_cast<double>(x) + 0.2332; })
+        .for_each([](auto &&x) { fmt::print("{}\n", x); })
         .destroy_each()
         .deallocate(alloc_d);
 }

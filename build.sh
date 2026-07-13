@@ -1,8 +1,8 @@
-compiler="gcc"
+compiler="g++"
 debug="-g"
 nodebug="-DNDEBUG"
 std="-std=c++23"
-
+opt="-O0"
 
 warnings="-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Winvalid-constexpr \
 -Wold-style-cast -Wcast-align -Wunused \
@@ -16,7 +16,7 @@ function do_and_speak {
 
 do_and_speak clear
 do_and_speak rm *.a
-do_and_speak rm build/*
+do_and_speak rm objects/*
 do_and_speak rm bin/*
 do_and_speak rm tests/*.out
 do_and_speak rm vgcore*
@@ -27,7 +27,7 @@ link_fmt="${include_fmt} -L ../fmt -lfmt -no-pie"
 
 compile_source() {
     name=$(basename $1)
-    do_and_speak $compiler -O3 $std $warnings $debug $include_fmt -c -Iinc/core -Iinc $src -o build/${name%.*}.o
+    do_and_speak $compiler $opt $std $warnings $debug $include_fmt -c -Iinc/core -Iinc $src -o objects/${name%.*}.o
 }
 
 for src in $(find src/*.cc)
@@ -41,12 +41,24 @@ do
 done
 
 libnames=()
-for object in $(find build/*.o)
+for object in $(find objects/*.o)
 do
     name=$(basename $object)
     libnames+=(-l${name%.*})
     do_and_speak ar rcs lib${name%.*}.a $object
 done
 
-do_and_speak $compiler -O3 $std $warnings $debug test_it.cc $link_fmt -L. ${libnames[@]} -Iinc -o bin/test_it-quick
+do_and_speak $compiler $opt $std $warnings $debug main.cc $link_fmt -L. ${libnames[@]} -Iinc -o bin/test_it-quick
 do_and_speak ./bin/test_it-quick
+
+echo Run Tests?
+read q
+
+if [ $q == y ]; then
+    do_and_speak valgrind ./bin/test_it-quick
+    for sanitize in address kernel-address undefined leak; do
+        do_and_speak $compiler $opt $std $warnings $debug -fsanitize=${sanitize} main.cc $link_fmt -L. ${libnames[@]} -Iinc -o bin/test_it-${sanitize}
+        do_and_speak ./bin/test_it-${sanitize}
+    done
+fi
+

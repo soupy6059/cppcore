@@ -1,6 +1,9 @@
 #ifndef MEMPTR__
 #define MEMPTR__
 
+#include <cstring>
+#include <cassert>
+
 namespace core {
 
 template<typename T>
@@ -115,15 +118,37 @@ struct memptr: public memptr_unsafe<T>, public std::ranges::view_interface<mempt
 
     template<typename Alloc> constexpr decltype(auto)
     allocate(Alloc &&alloc, size N = 1) noexcept {
-        extent = N;
         this->payload = std::forward<Alloc>(alloc).allocate(N);
-        if(!this->payload) extent = size(0);
+        extent = this->payload? N : size(0);
         return *this;
     }
 
     template<typename Alloc> constexpr decltype(auto)
     deallocate(Alloc &&alloc) noexcept {
         std::forward<Alloc>(alloc).deallocate(this->payload, extent);
+        return *this;
+    }
+
+    template<typename Alloc> constexpr decltype(auto)
+    reallocate(Alloc &&alloc, size N) noexcept {
+#if 1
+        memptr old = *this;
+        allocate(alloc, N);
+        if(!this->payload) {
+            std::swap(old,*this);
+            return *this;
+        }
+
+        size to_copy = std::min(old.extent, this->extent);
+        std::memcpy(this->get(), old.get(), to_copy);
+        old.deallocate(std::forward<Alloc>(alloc));
+#else
+        memptr new_data = allocate(alloc, N);
+        std::memcpy(new_data.get(), this->get(), std::min(new_data.extent, this->extent));
+        std::swap(new_data, *this);
+        new_data.deallocate(std::forward<Alloc>(alloc));
+#endif
+        
         return *this;
     }
 

@@ -1,11 +1,3 @@
-#include "core/allocator.hpp"
-#include "core/pool.hpp"
-#include "core/core.hpp"
-#include "core/defer.hpp"
-#include "core/matrix.hpp"
-#include "core/memptr.hpp"
-#include "core/string.hpp"
-
 #include <string>
 #include <functional>
 #ifndef NDEBUG
@@ -22,6 +14,15 @@
 #include <random>
 #include <limits>
 #include <memory>
+
+#include "core/allocator.hpp"
+#include "core/pool.hpp"
+#include "core/core.hpp"
+#include "core/defer.hpp"
+#include "core/matrix.hpp"
+#include "core/memptr.hpp"
+#include "core/string.hpp"
+
 
 #ifndef NDEBUG
 constexpr bool DEBUG = true;
@@ -148,6 +149,7 @@ pool_test2() {
 
     fib = [&](int N) -> int {
         if(static_cast<std::size_t>(N) >= CAPACITY) return std::numeric_limits<decltype(N)>::max(); // infinity!
+        if(static_cast<core::size>(N) >= results_size) return -1;
         if(N == 0) return 0;
         if(N == 1) return 1;
         if(!results) return fib(N - 1) + fib(N - 2);
@@ -169,10 +171,6 @@ pool_test2() {
             }
         );
     }
-
-    fout << "total bytes used: " << static_cast<decltype(storage)::size_type>(
-        storage.current - storage.payload
-    );
 }
 
 template<typename T>
@@ -261,7 +259,7 @@ strings() {
     .append(memory, std::string_view("Carter__"))
     .append(memory, std::string_view("Carter_" ));
     assert(name.payload.is_valid());
-    fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.size(), name.capacity());
+    fmt::print("{:?}, size = {}, capacity = {}\n", name.c_str(), name.length(), name.capacity());
     name.deallocate(memory);
 
     auto nofree_memory = core::pool_loud<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte, "logs/nofree_memory.log");
@@ -278,11 +276,12 @@ strings() {
     std::ranges::for_each(
         std::ranges::views::iota(core::size(0), core::kilobyte),
         [&words, &char_pool](core::size i [[maybe_unused]]) {
-            words.append(char_pool, std::string_view("."));
+            // words.append(char_pool, std::string_view("."));
+            words.append(char_pool, '.');
         }
     );
     assert(words.payload.is_valid() && "shortting seems to be working!");
-    fmt::print("word.size() == {}; word.capacity() == {}\n", words.size(), words.capacity());
+    fmt::print("word.size() == {}; word.capacity() == {}\n", words.length(), words.capacity());
     // should be about 64 bytes left in char_pool
     int *num = nofree_memory.allocate<int>(core::size(1));
     *num = 32;
@@ -305,7 +304,7 @@ fuzzing_strings() {
     );
 
     fmt::output_file("logs/fuzzed_string.log")
-    .print("{1}/{2} -> {0}\n", to_fuzz.c_str(), to_fuzz.size(), to_fuzz.capacity());
+    .print("{1}/{2} -> {0}\n", to_fuzz.c_str(), to_fuzz.length(), to_fuzz.capacity());
     to_fuzz.deallocate(alloc);
 }
 
@@ -314,8 +313,6 @@ void memptr_tests(std::string_view filename) noexcept {
     auto str_storage = StringAllocator();
     auto char_storage = CharAllocator();
     auto name = Ptr();
-    // for some reason this works even when there's very little memory availible (???)
-    // tests pass ig
     name.allocate(str_storage);
     if constexpr(std::is_same_v<Ptr,core::memptr_unsafe<core::string<>>>) {
         fmt::print("testing for bad alloc on str_storage\n");
@@ -458,18 +455,15 @@ void markov_chain_test() noexcept {
     buffer2.underlying.allocate(pool.adapt<field>(), buffer2.amount_to_allocate);
     std::uninitialized_value_construct_n(buffer2.underlying.get(), buffer2.amount_to_allocate);
 
+    auto file = fmt::output_file("logs/markov_computing.log");
     for(core::size k = 0; k < std::min(std::numeric_limits<core::size>::max(), core::size(300)); ++k) {
-#if 0
-        auto &&_ = buffer1.multiply(buffer2.in_place_allocator(), m0);
-#else
-        auto &&_ = buffer1.multiply(core::alloc::adapt(buffer2.underlying.get(), buffer2.underlying.extent), m0);
-#endif
+        auto &&g [[maybe_unused]] = buffer1.multiply(core::alloc::adapt(buffer2.underlying), m0);
         std::swap(buffer1, buffer2);
 
         {
             dedicated_printing_alloc.reset();
             core::string<> to_print = buffer1.format(dedicated_printing_alloc.adapt<core::string<>::char_t>());
-            fmt::print("m0^({}) =>\n{}\n", k, to_print.payload_or("(nil)"));
+            file.print("m0^({}) =>\n{}\n", k, to_print.payload_or("(nil)"));
         }
 
         field col_sum = 0.0;
@@ -496,14 +490,14 @@ void markov_chain_test() noexcept {
         .payload_or("nil")
     );
 #else
-    fmt::print("markov result =>\n{}\n",
+    fmt::output_file("logs/markov_result.log").print("markov result =>\n{}\n",
         m0.format(pool.adapt<core::string<>::char_t>())
         .payload_or("nil")
     );
 #endif
 }
 
-constexpr auto
+auto
 memptr_testing2() noexcept -> void {
     auto pool = core::pool<std::allocator<std::byte>>(core::hectobyte);
     auto character_allocator = pool.adapt<char>();
@@ -519,11 +513,11 @@ defer_testing() noexcept -> void {
     std::allocator<core::string<>> string_alloc;
     std::allocator<core::string<>::char_t> char_alloc;
     name.allocate(string_alloc);
-    core::defer _ ([=] mutable { name.deallocate(string_alloc); });
+    core::defer l0 ([=] mutable { name.deallocate(string_alloc); });
     
     core::construct_at(name)
     .append(char_alloc, "[CA]");
-    auto _ = core::defer([=] mutable {
+    auto l1 = core::defer([=] mutable {
         name->deallocate(char_alloc);
         core::destroy_at(name);
     });
@@ -554,23 +548,23 @@ monad_testing() -> void {
     };
 
     auto remove_with = []<typename alloc_t>(alloc_t &&alloc) {
-        return [=](core::i32 &num) mutable -> core::memptr<core::i32> {
+        return [=](core::i32 &num) mutable {
             if(num == core::i32(-1)) {
                 std::forward<alloc_t>(alloc)
                 .deallocate(std::addressof(num), 1);
-                return {};
+                return core::memptr<core::i32>();
             }
-            return {{std::addressof(num)}};
+            return core::memptr<core::i32>({std::addressof(num)}, {}, 1);
         };
     };
 
-    auto &&_ = x.transform(square).transform(print_num)
+    auto &&l1[[maybe_unused]] = x.transform(square).transform(print_num)
                 .and_then(remove_with(get_numbers))
                 .transform(print_num)
                 .transform([](core::i32) { return -1; })
                 .and_then(remove_with(get_numbers))
                 .transform(print_num);
-    auto &&_ = y.transform(square).transform(print_num);
+    auto &&l2[[maybe_unused]] = y.transform(square).transform(print_num);
 }
 
 auto matrix_fun() noexcept -> void {
@@ -652,6 +646,70 @@ constexpr auto memptr_ranges = [] {
     
     core::destroy_at(valid);
 };
+
+auto testing_default_pool() {
+    auto pool = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(core::hexabyte * 2 + 1);
+    auto l0 [[maybe_unused]] = pool.allocate<core::u8>(1);
+    auto s0   = core::string<>();
+    auto s1   = core::string<>();
+    s0.allocate(pool.adapt<core::string<>::char_t>(), core::hexabyte);
+    s1.allocate(pool.adapt<core::string<>::char_t>(), core::hexabyte);
+    
+    auto file = fmt::output_file("logs/strings_and_pools.log");
+    auto log_string = [&file](std::string_view name, core::string<> s) {
+        file.print("{} => {}.length() == {}; {}.capacity() == {}\n\t{:?}\n", name, name, s.length(), name, s.capacity(), s.c_str());
+    };
+#define LOG(X) do { log_string(#X, X); } while(false)
+
+    for(decltype(pool)::difference_type i = 0; i < reinterpret_cast<std::byte*>(pool.capacity) - reinterpret_cast<std::byte*>(pool.payload); ++i) {
+        s0.append(pool.adapt<core::string<>::char_t>(), '#');
+        s1.append(pool.adapt<core::string<>::char_t>(), '@');
+    }
+
+    assert(s0.length() == std::strlen(s0.c_str()));
+    assert(s1.length() == std::strlen(s1.c_str()));
+
+    LOG(s0);
+    LOG(s1);
+
+#undef LOG
+}
+
+auto string_buffers() {
+    auto pool = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte);
+    auto chpool = pool.adapt<core::string<>::char_t>();
+    auto s0 = core::string<>().allocate(chpool, core::hectobyte);
+    auto buffer1 = core::string<>().allocate(chpool, core::hectobyte);
+    auto buffer2 = core::string<>().allocate(chpool, core::hectobyte);
+
+    assert(s0.payload.is_valid() && buffer1.payload.is_valid() && buffer2.payload.is_valid());
+    assert(s0.capacity() == core::hectobyte && buffer1.capacity() == core::hectobyte && buffer2.capacity() == core::hectobyte);
+
+    s0.append(core::alloc::adapt(s0.payload), '#');
+    assert(s0.length() == 1);
+    
+    auto storage1 = core::alloc::adapt(buffer1.payload);
+    auto storage2 = core::alloc::adapt(buffer2.payload);
+    for(core::i32 i = 0; i < 20; ++i) {
+        buffer2 = core::string<>::concat(storage2, buffer1, s0);
+        std::swap(buffer1, buffer2);
+        std::swap(storage1, storage2);
+
+        assert(std::strlen(buffer1.data()) == buffer1.length());
+        assert(std::strlen(buffer2.data()) == buffer2.length());
+        assert(std::strlen(s0.data()) == s0.length());
+    }
+    fmt::print("buffer1 => {}\n", buffer1.c_str());
+    fmt::print("s0 => {}\n", s0.c_str());
+
+    core::memptr<core::i32> x;
+    x.allocate(std::allocator<core::i32>());
+    core::memptr<core::i32> y;
+    y.allocate(core::alloc::adapt(x));
+    *x = 32;
+    assert(*x == *y);
+    x.deallocate(std::allocator<core::i32>());
+}
 
 auto main() noexcept -> core::i32 {
     static_assert(pool_ub_test());
@@ -746,6 +804,10 @@ auto main() noexcept -> core::i32 {
     matrix_fun();
 
     memptr_ranges();
+
+    testing_default_pool();
+
+    string_buffers();
 
     return EXIT_SUCCESS;
 }

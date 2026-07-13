@@ -9,14 +9,6 @@
 namespace core {
 namespace alloc {
 
-#ifdef SAFEPOINTER
-template<typename T>
-concept SafePointer = requires(T ptr) {
-    ptr.get();
-    ptr.extent;
-};
-#endif
-
 template<typename T, std::size_t cap>
 struct typed {
     using value_type = T;
@@ -59,7 +51,7 @@ struct byte {
     using difference_type = std::ptrdiff_t;
     using pointer = value_type*;
     
-    std::byte payload[cap];
+    alignas(T) std::byte payload[cap];
     std::byte *current = payload;
     
     template<typename U>
@@ -114,22 +106,24 @@ struct resetting {
 };
 
 template<typename T>
+concept memptrish = requires (T ptr) {
+    ptr.get();
+    ptr.extent;
+};
+
+template<typename T>
 struct adapt {
     using value_type = T;
-    using size_type = size;
+    using size_type = std::size_t;
     using difference_type = std::ptrdiff_t;
     using pointer = value_type*;
 
-    T *payload;
-    size extent;
+    pointer payload;
+    size_type extent;
 
-    constexpr adapt(T *payload_, size extent_) noexcept
-        : payload(payload_), extent(extent_) {}
-#ifdef SAFEPOINTER
-    template<SafePointer weird_pointer>
-    constexpr adapt(weird_pointer &&ptr) noexcept
-        : payload(ptr.get()), extent(std::forward<weird_pointer>(ptr).extent) {}
-#endif
+    constexpr adapt(pointer payload_, size_type extent_) noexcept : payload(payload_), extent(extent_) {}
+
+    template<memptrish weird_pointer> constexpr adapt(weird_pointer &&ptr) noexcept : payload(ptr.get()), extent(ptr.extent) {}
 
     template<typename U>
     struct rebind {
@@ -137,11 +131,16 @@ struct adapt {
     };
 
     constexpr pointer allocate(size_type N) {
-        if(N * sizeof(T) > extent) { return nullptr; }
-        return reinterpret_cast<T*>(payload);
+        if(N > extent) { return nullptr; }
+        return payload;
     }
-
     constexpr void deallocate(pointer, size_type) noexcept {}
+};
+
+template<memptrish weird_pointer>
+adapt(weird_pointer &&) -> adapt<typename std::remove_reference_t<weird_pointer>::value_type>;
+
+};
 };
 
 #ifdef SAFEPOINTER

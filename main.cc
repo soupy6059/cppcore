@@ -151,6 +151,22 @@ struct safeptr {
         return *this;
     }
 
+    constexpr decltype(auto) reallocate(auto &&alloc, core::size amount, auto &&...args) noexcept {
+        safeptr nextptr;
+        nextptr
+            .allocate(alloc, amount)
+            .construct_each(std::forward<decltype(args)>(args)...);
+        for(core::size i = 0; i < std::min(nextptr.extent, extent); ++i) {
+            nextptr.payload[i] = std::move(payload[i]); // memcpy instead?
+        }
+        
+        destroy_each().deallocate(std::forward<decltype(alloc)>(alloc));
+
+        std::swap(nextptr, *this);
+
+        return *this;
+    }
+
     constexpr decltype(auto) deallocate(auto &&alloc) noexcept {
         assert(!constructed);
         std::forward<decltype(alloc)>(alloc).deallocate(payload, extent);
@@ -197,7 +213,7 @@ struct safeptr {
         }
         return *this;
     }
-    
+
     template<typename U>
     constexpr safeptr<U> transform(auto &&alloc_for_t, auto &&alloc_for_u, auto &&callable) noexcept {
         safeptr<U> nextptr;
@@ -227,6 +243,7 @@ auto devsafeptr1() {
     dev::safeptr<core::i32>()
         .allocate(alloc, 5)
         .construct_each()
+        .reallocate(alloc, 10)
         .map([](auto){ return 32; })
         .transform<double>(alloc, alloc_d, [](auto x) { return static_cast<double>(x) + 0.2332; })
         .for_each([](auto &&x) { fmt::print("{}\n", x); })

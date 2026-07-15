@@ -243,12 +243,40 @@ auto devsafeptr1() {
     dev::safeptr<core::i32>()
         .allocate(alloc, 5)
         .construct_each()
-        .reallocate(alloc, 10)
         .map([](auto){ return 32; })
+        .reallocate(alloc, 10, 45)
         .transform<double>(alloc, alloc_d, [](auto x) { return static_cast<double>(x) + 0.2332; })
         .for_each([](auto &&x) { fmt::print("{}\n", x); })
         .destroy_each()
         .deallocate(alloc_d);
+}
+
+// migrate?
+
+auto pooltesting() {
+    auto pool = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte);
+    char *excl = pool.allocate<char>(1);
+    *excl = '!';
+
+    dev::safeptr<std::string>()
+    .allocate(pool.adapt<std::string>(), 1)
+    .construct_each("Carter Aitken")
+    .for_each([excl](std::string &x) { x += excl; })
+    .for_each([](std::string &x) {
+        fmt::print("my name is {}\n", x);
+    })
+    .destroy_each();
+
+    dev::safeptr<dev::string<>>()
+    .allocate(pool.adapt<dev::string<>>(), 1)
+    .construct_each()
+    .for_each([&pool](dev::string<> &s) {
+        s.append(pool.adapt<char>(), "Carter Aitken!");
+    })
+    .for_each([](dev::string<> &x) {
+        fmt::print("[2] my name is {}\n", x.underlying.payload);
+    })
+    .destroy_each();
 }
 
 auto main() noexcept -> core::i32 {
@@ -257,4 +285,5 @@ auto main() noexcept -> core::i32 {
     memptrtests();
     devstrtest2();
     devsafeptr1();
+    pooltesting();
 }

@@ -89,7 +89,7 @@ struct pool_loud: public pool<Alloc> {
 
     template<typename T = std::byte> [[nodiscard]] 
     constexpr T *allocate(Alloc::size_type N) {
-        out.print("allocate<{}>({}); // allocates {} bytes\n", typeid(T).name(), N, N * sizeof(T));
+        out.print("allocate<?>({}); // allocates {} bytes\n", N, N * sizeof(T));
         decltype(auto) saved = pool<Alloc>::template allocate<T>(N);
         print_stats();
         if(!saved) {
@@ -115,7 +115,7 @@ struct pool_loud: public pool<Alloc> {
         using difference_type = Alloc::difference_type;
         constexpr AdaptedT *allocate(size_type N) {
             assert(parent);
-            parent->out.print("pool::adaptor<{}>({}) // allocated {} bytes\n", typeid(AdaptedT).name(), N, N * sizeof(AdaptedT));
+            parent->out.print("pool::adaptor<?>({}) // allocated {} bytes\n", N, N * sizeof(AdaptedT));
             return parent->allocate<AdaptedT>(N);
         }
         constexpr adaptor_loud &deallocate(AdaptedT*,size_type) {
@@ -125,7 +125,7 @@ struct pool_loud: public pool<Alloc> {
 
     template<typename AdaptT> [[nodiscard]]
     constexpr adaptor_loud<AdaptT> adapt() {
-        out.print("pool adapting to allocator<{}>\n", typeid(AdaptT).name());
+        out.print("pool adapting to allocator<?>\n");
         return adaptor_loud<AdaptT>(this);
     }
 

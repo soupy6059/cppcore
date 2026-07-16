@@ -3,9 +3,11 @@
 #define POOL__
 
 #include "fmt/core.h"
+#include "fmt/os.h"
+
 #include <typeinfo>
 #include <memory>
-#include "fmt/os.h"
+#include <cassert>
 
 namespace core {
 

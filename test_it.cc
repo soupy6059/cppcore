@@ -97,28 +97,6 @@ always_assert_(bool condition, [[maybe_unused]] std::string_view words) {
     }
 }
 
-void
-pool_test() {
-    auto alloc = core::pool(core::kilobyte);
-    decltype(auto) x = alloc.allocate<int>(1);
-    decltype(auto) y = alloc.allocate<int>(1);
-    decltype(auto) z = alloc.allocate<std::string>(1);
-
-    std::construct_at(x, 23);
-    std::construct_at(y, 34);
-    std::construct_at(z, "[CA]");
-
-    assert(*x == 23);
-    assert(*y == 34);
-    assert(*x != *y);
-
-    assert(*z == "[CA]");
-
-    std::destroy_at(y);
-    std::destroy_at(x);
-    std::destroy_at(z);
-}
-
 [[nodiscard]] consteval bool
 pool_ub_test() {
     auto alloc = core::alloc::typed<int,256>();

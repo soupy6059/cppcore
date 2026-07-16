@@ -56,7 +56,7 @@ read q
 
 if [ $q == y ]; then
     do_and_speak valgrind ./bin/test_it-quick
-    for sanitize in address kernel-address undefined leak; do
+    for sanitize in address undefined leak; do
         do_and_speak $compiler $opt $std $warnings $debug -fsanitize=${sanitize} main.cc $link_fmt -L. ${libnames[@]} -Iinc -o bin/test_it-${sanitize}
         do_and_speak ./bin/test_it-${sanitize}
     done

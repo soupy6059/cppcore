@@ -5,6 +5,8 @@
 #include "core/defer.hpp"
 #include <cassert>
 #include <cstring>
+#include <ranges>
+#include <algorithm>
 
 #define FMTLOG(X) do {\
     fmt::print("{:?}:\n\t{} => {}\n", __PRETTY_FUNCTION__, #X, X);\
@@ -207,6 +209,14 @@ struct safeptr {
         return *this;
     }
 
+    constexpr decltype(auto) for_at(core::size i, auto &&callable) noexcept {
+        if(i < extent) {
+            assert(constructed);
+            std::forward<decltype(callable)>(callable)(payload[i]);
+        }
+        return *this;
+    }
+
     constexpr decltype(auto) map(auto &&callable) noexcept {
         for(core::size i = 0; i < extent; ++i) {
             payload[i] = callable(payload[i]);
@@ -238,6 +248,7 @@ private:
 };
 
 auto devsafeptr1() {
+    auto logfile = fmt::output_file("logs/devsafeptr1.log");
     auto alloc = std::allocator<core::i32>();
     auto alloc_d = std::allocator<double>();
     dev::safeptr<core::i32>()
@@ -246,7 +257,7 @@ auto devsafeptr1() {
         .map([](auto){ return 32; })
         .reallocate(alloc, 10, 45)
         .transform<double>(alloc, alloc_d, [](auto x) { return static_cast<double>(x) + 0.2332; })
-        .for_each([](auto &&x) { fmt::print("{}\n", x); })
+        .for_each([&logfile](auto &&x) { logfile.print("{}\n", x); })
         .destroy_each()
         .deallocate(alloc_d);
 }
@@ -254,6 +265,7 @@ auto devsafeptr1() {
 // migrate?
 
 auto pooltesting() {
+    auto logfile = fmt::output_file("logs/pooltesting.log");
     auto pool = core::pool<core::alloc::byte<std::byte,core::kilobyte>>(core::kilobyte);
     char *excl = pool.allocate<char>(1);
     *excl = '!';
@@ -262,8 +274,8 @@ auto pooltesting() {
     .allocate(pool.adapt<std::string>(), 1)
     .construct_each("Carter Aitken")
     .for_each([excl](std::string &x) { x += excl; })
-    .for_each([](std::string &x) {
-        fmt::print("my name is {}\n", x);
+    .for_each([&logfile](std::string &x) {
+        logfile.print("my name is {}\n", x);
     })
     .destroy_each();
 
@@ -273,10 +285,86 @@ auto pooltesting() {
     .for_each([&pool](dev::string<> &s) {
         s.append(pool.adapt<char>(), "Carter Aitken!");
     })
-    .for_each([](dev::string<> &x) {
-        fmt::print("[2] my name is {}\n", x.underlying.payload);
+    .for_each([&logfile](dev::string<> &x) {
+        logfile.print("[2] my name is {}\n", x.underlying.payload);
     })
     .destroy_each();
+}
+
+void
+pooltest() {
+    auto alloc = core::pool(core::kilobyte);
+    decltype(auto) x = alloc.allocate<int>(1);
+    decltype(auto) y = alloc.allocate<int>(1);
+    decltype(auto) z = alloc.allocate<std::string>(1);
+
+    std::construct_at(x, 23);
+    std::construct_at(y, 34);
+    std::construct_at(z, "[CA]");
+
+    assert(*x == 23);
+    assert(*y == 34);
+    assert(*x != *y);
+
+    assert(*z == "[CA]");
+
+    std::destroy_at(y);
+    std::destroy_at(x);
+    std::destroy_at(z);
+}
+
+[[nodiscard]] constexpr auto
+fib(core::i32 x, dev::safeptr<dev::safeptr<core::i32>> &cache, auto &&pool) noexcept -> core::i32 {
+    assert(x >= 0);
+    if(x == 0) return 0;
+    if(x == 1) return 1;
+    core::i32 to_return = -1;
+    cache.for_at(static_cast<core::size>(x), [&](dev::safeptr<core::i32> &previous_result_box) {
+        previous_result_box.for_at(0, [&](core::i32 previous_result) {
+            to_return = previous_result;
+        });
+    });
+    if(to_return != -1) return to_return; 
+
+    to_return = fib(x - 1, cache, pool) + fib(x - 2, cache, pool);
+    cache.for_at(static_cast<core::size>(x), [to_return,&pool](dev::safeptr<core::i32> &nulled) {
+        nulled.allocate(pool. template adapt<core::i32>(), 1)
+            .construct_each(to_return);
+    });
+    return to_return;
+}
+
+void
+pool_test2() {
+    static constexpr core::size memory_capacity = core::kilobyte;
+    static auto storage = core::pool_loud<core::alloc::byte<std::byte,memory_capacity>>(memory_capacity, "logs/pool_test2_allocator.log");
+    storage.reset();
+    
+    core::i32 cache_size = 32;
+    auto cache = dev::safeptr<dev::safeptr<core::i32>>()
+        .allocate(storage.adapt<dev::safeptr<core::i32>>(), static_cast<core::size>(cache_size))
+        .construct_each();
+    storage.out.flush();
+
+    cache.for_at(0, [&](dev::safeptr<core::i32> &ptr) {
+        ptr.allocate(storage.adapt<core::i32>(), 1)
+            .construct_each(0);
+    });
+
+    cache.for_at(1, [&](dev::safeptr<core::i32> &ptr) {
+        ptr.allocate(storage.adapt<core::i32>(), 1)
+            .construct_each(1);
+    });
+
+    auto compute_cache [[maybe_unused]] = fib(cache_size, cache, storage);
+
+    auto logfile = fmt::output_file("logs/pool_test2.log");
+    std::ranges::for_each(
+        std::ranges::views::iota(0, cache_size),
+        [&](core::i32 i) {
+            logfile.print("{} => {}\n", i, fib(i, cache, storage));
+        }
+    );
 }
 
 auto main() noexcept -> core::i32 {
@@ -286,4 +374,6 @@ auto main() noexcept -> core::i32 {
     devstrtest2();
     devsafeptr1();
     pooltesting();
+    pooltest();
+    pool_test2();
 }

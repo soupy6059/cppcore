@@ -9,6 +9,14 @@
 #include <memory>
 #include <cassert>
 
+#include <iostream>
+#include <bitset>
+
+std::ostream& operator<<(std::ostream& os, std::byte b)
+{
+    return os << std::bitset<8>(std::to_integer<int>(b));
+}
+
 namespace core {
 
 template<typename Alloc = std::allocator<std::byte>>
@@ -21,20 +29,37 @@ struct pool {
     void *current;
     void *capacity;
     Alloc alloc{};
+
+    constexpr void print_memory() {
+        size n = 0;
+        for(std::byte *iter = reinterpret_cast<std::byte*>(payload); iter < reinterpret_cast<std::byte*>(current); ++iter) {
+            if(n % 8 == 0) std::cout.put('\n');
+            if(iter == reinterpret_cast<std::byte*>(current)) {
+                std::cout << '[' << *iter << ']';
+            } else {
+                std::cout << ' ' << *iter << ' ';
+            }
+            ++n;
+        }
+        std::cout.put('\n');
+    }
     
     constexpr pool(Alloc::size_type N) {
         payload = reinterpret_cast<void*>(alloc.allocate(N));
         current = payload;
         capacity = reinterpret_cast<std::byte*>(payload) + N;
+        
     }
 
     constexpr pool &reset() {
+        
         current = payload;
         return *this;
     }
 
     template<typename T> [[nodiscard]] 
     constexpr T *allocate(Alloc::size_type N) {
+        
         auto size_left = reinterpret_cast<std::uintptr_t>(capacity) - reinterpret_cast<std::uintptr_t>(current);
         if(!std::align(alignof(T), sizeof(T) * N, current, size_left)) { return nullptr; }
         current = static_cast<std::byte*>(current) + sizeof(T) * N;
@@ -58,10 +83,12 @@ struct pool {
 
     template<typename AdaptT> [[nodiscard]]
     constexpr adaptor<AdaptT> adapt() {
+        
         return adaptor<AdaptT>(this);
     }
 
     constexpr ~pool() noexcept {
+        
         alloc.deallocate(
             reinterpret_cast<Alloc::value_type*>(payload), 
             static_cast<Alloc::size_type>(
@@ -74,9 +101,11 @@ struct pool {
 template<typename Alloc = std::allocator<std::byte>>
 struct pool_loud: public pool<Alloc> {
     fmt::ostream out;
-    pool_loud(Alloc::size_type N, auto &&filename): pool<Alloc>(N), out(fmt::output_file(filename)) {
-        out.print("pool_loud({}, {:});\n", N, filename);
+    pool_loud(Alloc::size_type N, auto &&filename): pool<Alloc>(N), out(fmt::output_file(std::forward<decltype(filename)>(filename))) {
+        out.print("pool_loud({}, {});\n", N, filename);
     }
+
+    constexpr pool_loud &operator=(pool_loud&&) = delete;
 
     void print_stats() noexcept {
         out.print("\tused: {}; left: {};\n",

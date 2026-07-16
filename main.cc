@@ -336,15 +336,18 @@ fib(core::i32 x, dev::safeptr<dev::safeptr<core::i32>> &cache, auto &&pool) noex
 
 void
 pool_test2() {
-    static constexpr core::size memory_capacity = core::kilobyte;
-    static auto storage = core::pool_loud<core::alloc::byte<std::byte,memory_capacity>>(memory_capacity, "logs/pool_test2_allocator.log");
+    std::puts("=============== START HERE ====================\n\n\n\n");
+    std::puts(__PRETTY_FUNCTION__);
+    static constexpr core::size memory_capacity = core::hectobyte * 3;
+    static auto storage = core::pool<core::alloc::byte<std::byte,memory_capacity>>(memory_capacity);
     storage.reset();
     
-    core::i32 cache_size = 32;
+    core::i32 cache_size = 16;
     auto cache = dev::safeptr<dev::safeptr<core::i32>>()
         .allocate(storage.adapt<dev::safeptr<core::i32>>(), static_cast<core::size>(cache_size))
         .construct_each();
-    storage.out.flush();
+
+    // storage.print_memory();
 
     cache.for_at(0, [&](dev::safeptr<core::i32> &ptr) {
         ptr.allocate(storage.adapt<core::i32>(), 1)
@@ -357,6 +360,7 @@ pool_test2() {
     });
 
     auto compute_cache [[maybe_unused]] = fib(cache_size, cache, storage);
+    storage.print_memory();
 
     auto logfile = fmt::output_file("logs/pool_test2.log");
     std::ranges::for_each(

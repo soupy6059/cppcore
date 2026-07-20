@@ -308,11 +308,14 @@ pooltest() {
 
     assert(*z == "[CA]");
 
+    alloc.print_memory();
+
     std::destroy_at(y);
     std::destroy_at(x);
     std::destroy_at(z);
 }
 
+#if 0
 [[nodiscard]] constexpr auto
 fib(core::i32 x, dev::safeptr<dev::safeptr<core::i32>> &cache, auto &&pool) noexcept -> core::i32 {
     assert(x >= 0);
@@ -358,7 +361,7 @@ pool_test2() {
         ptr.allocate(storage.adapt<core::i32>(), 1)
             .construct_each(1);
     });
-
+    
     auto compute_cache [[maybe_unused]] = fib(cache_size, cache, storage);
     storage.print_memory();
 
@@ -371,6 +374,58 @@ pool_test2() {
     );
 }
 
+#endif
+
+core::i32 fib2(core::i32 x) {
+    static auto storage = core::pool<std::allocator<std::byte>> (core::kilobyte);
+    static core::i32 *cache[core::hectobyte] = {nullptr};
+    storage.print_memory();
+    if(not (0 <= x and static_cast<core::size>(x) < core::hectobyte)) {
+        return -1;
+    }
+
+    // base case
+    {
+        if(x == 0) return 0;
+        if(x == 1) return 1;
+    }
+
+    if(cache[x]) return *cache[x];
+
+    core::i32 answer = fib2(x - 1) + fib2(x - 2);
+
+    if((cache[x] = storage.allocate<core::i32>(1))) {
+        *cache[x] = answer;
+    }
+
+    return answer;
+}
+
+core::i32 fib3(core::i32 x) {
+    static auto storage = core::pool<core::alloc::byte<std::byte,core::kilobyte>> (core::kilobyte);
+    static core::i32 *cache[core::hectobyte] = {nullptr};
+    storage.print_memory();
+    if(not (0 <= x and static_cast<core::size>(x) < core::hectobyte)) {
+        return -1;
+    }
+
+    // base case
+    {
+        if(x == 0) return 0;
+        if(x == 1) return 1;
+    }
+
+    if(cache[x]) return *cache[x];
+
+    core::i32 answer = fib2(x - 1) + fib2(x - 2);
+
+    if((cache[x] = storage.allocate<core::i32>(1))) {
+        *cache[x] = answer;
+    }
+
+    return answer;
+}
+
 auto main() noexcept -> core::i32 {
     devstrtest();
     inttests();
@@ -379,5 +434,11 @@ auto main() noexcept -> core::i32 {
     devsafeptr1();
     pooltesting();
     pooltest();
+#if 0
     pool_test2();
+#endif
+
+    for(core::size i = 0; i < 30; ++i) {
+        fmt::print("fib2({}) = {}\n", i, fib3(static_cast<core::i32>(i)));
+    }
 }

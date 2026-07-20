@@ -426,6 +426,31 @@ core::i32 fib3(core::i32 x) {
     return answer;
 }
 
+core::i32 fib4(core::i32 x) {
+    static auto storage = core::pool<core::alloc::byte<std::byte,core::kilobyte>> (core::kilobyte);
+    static dev::safeptr<core::i32> cache[core::hectobyte];
+    storage.print_memory();
+    if(not (0 <= x and static_cast<core::size>(x) < core::hectobyte)) {
+        return -1;
+    }
+
+    // base case
+    {
+        if(x == 0) return 0;
+        if(x == 1) return 1;
+    }
+    
+    core::i32 getter = -1;
+    cache[x].for_each([&](int answer) { getter = answer; });
+    if(getter != -1) return getter;
+    
+    auto answer = fib4(x - 1) + fib4(x - 2);
+    cache[x].allocate(storage.adapt<core::i32>(), 1)
+        .construct_each(answer);
+
+    return answer;
+}
+
 auto main() noexcept -> core::i32 {
     devstrtest();
     inttests();
@@ -439,6 +464,6 @@ auto main() noexcept -> core::i32 {
 #endif
 
     for(core::size i = 0; i < 30; ++i) {
-        fmt::print("fib2({}) = {}\n", i, fib3(static_cast<core::i32>(i)));
+        fmt::print("fib2({}) = {}\n", i, fib4(static_cast<core::i32>(i)));
     }
 }

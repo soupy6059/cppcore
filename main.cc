@@ -182,7 +182,7 @@ struct safeptr {
         for(core::size i = 0; i < extent; ++i) {
             std::construct_at(payload + i, std::forward<decltype(args)>(args)...);
         }
-        constructed = true;
+        if(payload) constructed = true;
         return *this;
     }
 
@@ -237,6 +237,10 @@ struct safeptr {
         deallocate(std::forward<decltype(alloc_for_t)>(alloc_for_t));
 
         return nextptr;
+    }
+
+    void print_memory() {
+        fmt::print("extent = {}, constructed = {}, payload = {}\n", extent, constructed, static_cast<void*>(payload));
     }
 
 private:
@@ -451,6 +455,44 @@ core::i32 fib4(core::i32 x) {
     return answer;
 }
 
+
+// storage => 4 kilobytes
+static auto storage = core::pool<core::alloc::byte<std::byte,4 * core::kilobyte>> (4 * core::kilobyte);
+core::i32 fib5(core::i32 x) {
+    static dev::safeptr<dev::safeptr<core::i32>> cache;
+    static core::size call_count = 0;
+    if(call_count == 0) {
+        // cache => 60 dev::safeptr<core::i32> @ storage
+        cache.allocate(storage.adapt<dev::safeptr<core::i32>>(), 60).construct_each();
+    }
+    ++call_count;
+
+    if(not (0 <= x and static_cast<core::size>(x) < core::hectobyte)) {
+        return -1;
+    }
+
+    // base case
+    {
+        if(x == 0) return 0;
+        if(x == 1) return 1;
+    }
+    
+    core::i32 getter = -1;
+    cache.for_at(static_cast<core::size>(x), [&](dev::safeptr<core::i32> &cache_local) {
+        cache_local.for_each([&](core::i32 answer) { getter = answer; });
+    });
+    if(getter != -1) return getter;
+    
+    auto answer = fib5(x - 1) + fib5(x - 2);
+    cache.for_at(static_cast<core::size>(x), [&](dev::safeptr<core::i32> &cache_local) {
+        // cache_local => 1 core::i32 @ storage + cache
+        cache_local.allocate(storage.adapt<core::i32>(), 1)
+        .construct_each(answer);
+    });
+
+    return answer;
+}
+
 auto main() noexcept -> core::i32 {
     devstrtest();
     inttests();
@@ -463,7 +505,8 @@ auto main() noexcept -> core::i32 {
     pool_test2();
 #endif
 
-    for(core::size i = 0; i < 30; ++i) {
-        fmt::print("fib2({}) = {}\n", i, fib4(static_cast<core::i32>(i)));
+    for(core::size i = 0; i < 37; ++i) {
+        fmt::print("fib5({}) = {}\n", i, fib5(static_cast<core::i32>(i)));
     }
+    storage.print_memory();
 }

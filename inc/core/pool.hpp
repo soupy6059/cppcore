@@ -59,10 +59,12 @@ struct pool {
 
     template<typename T> [[nodiscard]] 
     constexpr T *allocate(Alloc::size_type N) {
-        
         auto size_left = reinterpret_cast<std::uintptr_t>(capacity) - reinterpret_cast<std::uintptr_t>(current);
-        if(!std::align(alignof(T), sizeof(T) * N, current, size_left)) { return nullptr; }
-        current = static_cast<std::byte*>(current) + sizeof(T) * N;
+        if(!std::align(alignof(T), sizeof(T) * N, current, size_left)) {
+            fmt::print("core::pool: alignment failure!\ncalled with alignof(T) = {}, sizeof(T) * N = {}, current = {}, size_left = {}\n", alignof(T), sizeof(T) * N, reinterpret_cast<void*>(current), size_left);
+            return nullptr;
+        }
+        current = reinterpret_cast<std::byte*>(current) + sizeof(T) * N;
         return reinterpret_cast<T*>(current);
     }
     

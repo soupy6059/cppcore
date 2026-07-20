@@ -419,7 +419,7 @@ core::i32 fib3(core::i32 x) {
 
     core::i32 answer = fib2(x - 1) + fib2(x - 2);
 
-    if((cache[x] = storage.allocate<core::i32>(1))) {
+    if(( cache[x] = storage.allocate<core::i32>(1) )) {
         *cache[x] = answer;
     }
 

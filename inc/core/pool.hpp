@@ -12,6 +12,8 @@
 #include <iostream>
 #include <bitset>
 
+#include "core/log.hpp"
+
 std::ostream& operator<<(std::ostream& os, std::byte b)
 {
     return os << std::bitset<8>(std::to_integer<int>(b));
@@ -31,6 +33,7 @@ struct pool {
     Alloc alloc{};
 
     constexpr void print_memory() {
+        if constexpr(log::level >= log::medium) return;
         size n = 0;
         for(std::byte *iter = reinterpret_cast<std::byte*>(payload); iter < reinterpret_cast<std::byte*>(current); ++iter) {
             if(n % 8 == 0) std::cout.put('\n');
@@ -47,12 +50,15 @@ struct pool {
     constexpr pool(Alloc::size_type N) {
         payload = reinterpret_cast<void*>(alloc.allocate(N));
         current = payload;
-        capacity = reinterpret_cast<std::byte*>(payload) + N;
-        
+        if(payload) {
+            capacity = reinterpret_cast<std::byte*>(payload) + N;
+        }
+        if(!payload) { if constexpr(log::level < log::critical) {
+            fmt::print("failure to initialize a pool of size {}!\n", N);
+        } }
     }
 
     constexpr pool &reset() {
-        
         current = payload;
         return *this;
     }
@@ -61,7 +67,9 @@ struct pool {
     constexpr T *allocate(Alloc::size_type N) {
         auto size_left = reinterpret_cast<std::uintptr_t>(capacity) - reinterpret_cast<std::uintptr_t>(current);
         if(!std::align(alignof(T), sizeof(T) * N, current, size_left)) {
-            fmt::print("core::pool: alignment failure!\ncalled with alignof(T) = {}, sizeof(T) * N = {}, current = {}, size_left = {}\n", alignof(T), sizeof(T) * N, reinterpret_cast<void*>(current), size_left);
+            if constexpr(log::level < log::medium) {
+                fmt::print("core::pool: alignment failure!\ncalled with alignof(T) = {}, sizeof(T) * N = {}, current = {}, size_left = {}\n", alignof(T), sizeof(T) * N, reinterpret_cast<void*>(current), size_left);
+            }
             return nullptr;
         }
         current = reinterpret_cast<std::byte*>(current) + sizeof(T) * N;
@@ -85,12 +93,10 @@ struct pool {
 
     template<typename AdaptT> [[nodiscard]]
     constexpr adaptor<AdaptT> adapt() {
-        
         return adaptor<AdaptT>(this);
     }
 
     constexpr ~pool() noexcept {
-        
         alloc.deallocate(
             reinterpret_cast<Alloc::value_type*>(payload), 
             static_cast<Alloc::size_type>(

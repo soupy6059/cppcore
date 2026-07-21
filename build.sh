@@ -1,5 +1,5 @@
 compiler="g++"
-debug="-g"
+debug="-g -DLOG_LEVEL=0"
 nodebug="-DNDEBUG"
 std="-std=c++23"
 opt="-O0"

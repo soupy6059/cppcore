@@ -182,7 +182,7 @@ struct safeptr {
         for(core::size i = 0; i < extent; ++i) {
             std::construct_at(payload + i, std::forward<decltype(args)>(args)...);
         }
-        constructed = true;
+        if(payload) constructed = true;
         return *this;
     }
 
@@ -237,6 +237,10 @@ struct safeptr {
         deallocate(std::forward<decltype(alloc_for_t)>(alloc_for_t));
 
         return nextptr;
+    }
+
+    void print_memory() {
+        fmt::print("extent = {}, constructed = {}, payload = {}\n", extent, constructed, static_cast<void*>(payload));
     }
 
 private:
@@ -308,11 +312,14 @@ pooltest() {
 
     assert(*z == "[CA]");
 
+    alloc.print_memory();
+
     std::destroy_at(y);
     std::destroy_at(x);
     std::destroy_at(z);
 }
 
+#if 0
 [[nodiscard]] constexpr auto
 fib(core::i32 x, dev::safeptr<dev::safeptr<core::i32>> &cache, auto &&pool) noexcept -> core::i32 {
     assert(x >= 0);
@@ -336,15 +343,18 @@ fib(core::i32 x, dev::safeptr<dev::safeptr<core::i32>> &cache, auto &&pool) noex
 
 void
 pool_test2() {
-    static constexpr core::size memory_capacity = core::kilobyte;
-    static auto storage = core::pool_loud<core::alloc::byte<std::byte,memory_capacity>>(memory_capacity, "logs/pool_test2_allocator.log");
+    std::puts("=============== START HERE ====================\n\n\n\n");
+    std::puts(__PRETTY_FUNCTION__);
+    static constexpr core::size memory_capacity = core::hectobyte * 3;
+    static auto storage = core::pool<core::alloc::byte<std::byte,memory_capacity>>(memory_capacity);
     storage.reset();
     
-    core::i32 cache_size = 32;
+    core::i32 cache_size = 16;
     auto cache = dev::safeptr<dev::safeptr<core::i32>>()
         .allocate(storage.adapt<dev::safeptr<core::i32>>(), static_cast<core::size>(cache_size))
         .construct_each();
-    storage.out.flush();
+
+    // storage.print_memory();
 
     cache.for_at(0, [&](dev::safeptr<core::i32> &ptr) {
         ptr.allocate(storage.adapt<core::i32>(), 1)
@@ -355,8 +365,9 @@ pool_test2() {
         ptr.allocate(storage.adapt<core::i32>(), 1)
             .construct_each(1);
     });
-
+    
     auto compute_cache [[maybe_unused]] = fib(cache_size, cache, storage);
+    storage.print_memory();
 
     auto logfile = fmt::output_file("logs/pool_test2.log");
     std::ranges::for_each(
@@ -367,6 +378,121 @@ pool_test2() {
     );
 }
 
+#endif
+
+core::i32 fib2(core::i32 x) {
+    static auto storage = core::pool<std::allocator<std::byte>> (core::kilobyte);
+    static core::i32 *cache[core::hectobyte] = {nullptr};
+    storage.print_memory();
+    if(not (0 <= x and static_cast<core::size>(x) < core::hectobyte)) {
+        return -1;
+    }
+
+    // base case
+    {
+        if(x == 0) return 0;
+        if(x == 1) return 1;
+    }
+
+    if(cache[x]) return *cache[x];
+
+    core::i32 answer = fib2(x - 1) + fib2(x - 2);
+
+    if((cache[x] = storage.allocate<core::i32>(1))) {
+        *cache[x] = answer;
+    }
+
+    return answer;
+}
+
+core::i32 fib3(core::i32 x) {
+    static auto storage = core::pool<core::alloc::byte<std::byte,core::kilobyte>> (core::kilobyte);
+    static core::i32 *cache[core::hectobyte] = {nullptr};
+    storage.print_memory();
+    if(not (0 <= x and static_cast<core::size>(x) < core::hectobyte)) {
+        return -1;
+    }
+
+    // base case
+    {
+        if(x == 0) return 0;
+        if(x == 1) return 1;
+    }
+
+    if(cache[x]) return *cache[x];
+
+    core::i32 answer = fib2(x - 1) + fib2(x - 2);
+
+    if(( cache[x] = storage.allocate<core::i32>(1) )) {
+        *cache[x] = answer;
+    }
+
+    return answer;
+}
+
+core::i32 fib4(core::i32 x) {
+    static auto storage = core::pool<core::alloc::byte<std::byte,core::kilobyte>> (core::kilobyte);
+    static dev::safeptr<core::i32> cache[core::hectobyte];
+    storage.print_memory();
+    if(not (0 <= x and static_cast<core::size>(x) < core::hectobyte)) {
+        return -1;
+    }
+
+    // base case
+    {
+        if(x == 0) return 0;
+        if(x == 1) return 1;
+    }
+    
+    core::i32 getter = -1;
+    cache[x].for_each([&](int answer) { getter = answer; });
+    if(getter != -1) return getter;
+    
+    auto answer = fib4(x - 1) + fib4(x - 2);
+    cache[x].allocate(storage.adapt<core::i32>(), 1)
+        .construct_each(answer);
+
+    return answer;
+}
+
+
+// storage => 4 kilobytes
+static auto storage = core::pool<core::alloc::byte<std::byte,4 * core::kilobyte>> (4 * core::kilobyte);
+core::i32 fib5(core::i32 x) {
+    static dev::safeptr<dev::safeptr<core::i32>> cache;
+    static core::size call_count = 0;
+    if(call_count == 0) {
+        // cache => 60 dev::safeptr<core::i32> @ storage
+        cache.allocate(storage.adapt<dev::safeptr<core::i32>>(), 60).construct_each();
+    }
+    ++call_count;
+
+    if(not (0 <= x and static_cast<core::size>(x) < core::hectobyte)) {
+        return -1;
+    }
+
+    // base case
+    {
+        if(x == 0) return 0;
+        if(x == 1) return 1;
+    }
+    
+    core::i32 getter = -1;
+    cache.for_at(static_cast<core::size>(x), [&](dev::safeptr<core::i32> &cache_local) {
+        cache_local.for_each([&](core::i32 answer) { getter = answer; });
+    });
+    if(getter != -1) return getter;
+    
+    auto answer = fib5(x - 1) + fib5(x - 2);
+    cache.for_at(static_cast<core::size>(x), [&](dev::safeptr<core::i32> &cache_local) {
+        // cache_local => 1 core::i32 @ storage + cache
+        cache_local.allocate(storage.adapt<core::i32>(), 1)
+        .construct_each(answer);
+    });
+
+    return answer;
+}
+
 auto main() noexcept -> core::i32 {
     devstrtest();
     inttests();
@@ -375,5 +501,12 @@ auto main() noexcept -> core::i32 {
     devsafeptr1();
     pooltesting();
     pooltest();
+#if 0
     pool_test2();
+#endif
+
+    for(core::size i = 0; i < 37; ++i) {
+        fmt::print("fib5({}) = {}\n", i, fib5(static_cast<core::i32>(i)));
+    }
+    storage.print_memory();
 }

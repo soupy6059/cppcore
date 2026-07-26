@@ -6,6 +6,8 @@
 #include "fmt/core.h"
 #include "fmt/os.h"
 
+#include <memory>
+
 namespace core {
 namespace alloc {
 

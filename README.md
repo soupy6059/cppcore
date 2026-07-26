@@ -1,17 +1,4 @@
 # TODO
-- Add a strict_access_memptr
-- priptr "private_pointer"
-
-```c++
-template<typename T>
-class priptr final {
-    constexpr decltype(auto) allocate(auto &&alloc, size N) noexcept {
-        payload = std::forward<decltype(alloc)>(alloc).allocate(N);
-        extent = payload? N : size(0);
-        return *this;
-    }
-private:
-    T *payload = nullptr;
-    size extent = 0;
-};
-```
+- adding a source_location for logging alignment failures and whatnot
+- errors as values.
+- no "do nothing on failure;" return explicit errors to handle at the call site.

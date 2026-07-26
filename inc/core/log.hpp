@@ -27,6 +27,7 @@ namespace core {
         static constexpr core::size low = LOG_LOW;
         static constexpr core::size medium = LOG_MEDIUM;
         static constexpr core::size high = LOG_HIGH;
+        static constexpr core::size critical = LOG_CRITICAL;
         static constexpr core::size always = LOG_ALWAYS;
     };
 };

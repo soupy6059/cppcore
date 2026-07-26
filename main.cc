@@ -7,6 +7,8 @@
 #include <cstring>
 #include <ranges>
 #include <algorithm>
+#include <expected>
+#include <source_location>
 
 #define FMTLOG(X) do {\
     fmt::print("{:?}:\n\t{} => {}\n", __PRETTY_FUNCTION__, #X, X);\
@@ -251,6 +253,34 @@ private:
 
 };
 
+namespace dev {
+
+template<typename T>
+struct errptr {
+    enum class error {
+        allocation_failure,
+    };
+
+    errptr &operator=(errptr const &other) = delete;
+    errptr(errptr const &other) = delete;
+
+    [[nodiscard]] constexpr std::expected<errptr,error> allocate(auto &&alloc, core::size amount) noexcept {
+        payload = std::forward<decltype(alloc)>(alloc).allocate(amount);
+        if(!payload) {
+            return std::unexpected(error::allocation_failure);
+        }
+        extent = payload? amount : 0;
+        return std::move(*this);
+    }
+
+private:
+    core::size extent;
+    bool constructed = false;
+    T *payload = nullptr;
+};
+
+};
+
 auto devsafeptr1() {
     auto logfile = fmt::output_file("logs/devsafeptr1.log");
     auto alloc = std::allocator<core::i32>();
@@ -482,7 +512,7 @@ core::i32 fib5(core::i32 x) {
         cache_local.for_each([&](core::i32 answer) { getter = answer; });
     });
     if(getter != -1) return getter;
-    
+
     auto answer = fib5(x - 1) + fib5(x - 2);
     cache.for_at(static_cast<core::size>(x), [&](dev::safeptr<core::i32> &cache_local) {
         // cache_local => 1 core::i32 @ storage + cache
@@ -491,6 +521,147 @@ core::i32 fib5(core::i32 x) {
     });
 
     return answer;
+}
+
+namespace dev {
+
+template<typename T>
+struct verbose_ptr {
+private:
+#define set_error(type, error) (print_error_set_(#type, #error), type :: error)
+    void print_error_set_(std::string_view type, std::string_view error, std::source_location location = std::source_location::current()) {
+        os.print("{}@{}; {}({}:{}) `{}`\n", type.data(), error.data(), location.file_name(), location.line(), location.column(), location.function_name());
+        os.flush();
+    }
+public:
+
+    static constexpr verbose_ptr make(std::string_view filename, std::string_view message, std::source_location location = std::source_location::current()) noexcept {
+        verbose_ptr ptr(nullptr, 0, false, filename);
+        ptr.print_self(message, location);
+        ptr.print_self("after default construction of the pointer", location);
+        return ptr;
+    }
+    
+    enum class allocate_error {
+        NIL, NULLPTR_ON_ALLOCATION,
+    };
+    constexpr decltype(auto) allocate(auto &&alloc, core::size amount, std::source_location location = std::source_location::current()) noexcept {
+        print_self("before allocation", location);
+        auto error = allocate_error::NIL;
+        payload = std::forward<decltype(alloc)>(alloc).allocate(amount);
+        if(!payload) {
+            error = set_error(allocate_error, NULLPTR_ON_ALLOCATION);
+        }
+        extent = payload? amount : 0;
+        print_self("after allocation", location);
+        return error;
+    }
+
+    constexpr decltype(auto) deallocate(auto &&alloc, std::source_location location = std::source_location::current()) noexcept {
+        assert(!constructed);
+        print_self("before deallocation", location);
+        std::forward<decltype(alloc)>(alloc).deallocate(payload, extent);
+        payload = nullptr;
+        extent = 0;
+        constructed = false;
+        print_self("after deallocation", location);
+        return *this;
+    }
+
+    template<typename tuple_t>
+    constexpr decltype(auto) construct_each(tuple_t &&args, std::source_location location = std::source_location::current()) noexcept {
+        print_self("before construction", location);
+        if(extent) assert(payload);
+        if(payload) assert(extent);
+        assert(!constructed);
+        for(core::size i = 0; i < extent; ++i) {
+            std::apply(
+                []<typename pointer_t, typename ...args_t>(pointer_t &&ptr, args_t &&...args_){
+                    std::construct_at(std::forward<pointer_t>(ptr), std::forward<args_t>(args_)...);
+                },
+                std::tuple_cat(std::make_tuple(payload + i), std::forward<tuple_t>(args))
+            );
+        }
+        if(payload) constructed = true;
+        print_self("after construction", location);
+        return *this;
+    }
+
+    enum class destroy_each_error {
+        NIL,
+        NO_PAYLOAD,
+    };
+    constexpr destroy_each_error destroy_each(std::source_location location = std::source_location::current()) noexcept {
+        print_self("before destruction", location);
+        if(extent) assert(payload);
+        if(payload) assert(extent);
+        assert(constructed);
+        auto error = destroy_each_error::NIL;
+        if(!payload) {
+            error = set_error(destroy_each_error, NO_PAYLOAD);
+        }
+        for(core::size i = 0; i < extent; ++i) {
+            std::destroy_at(payload + i);
+        }
+        constructed = false;
+        print_self("after destruction", location);
+        return error;
+    }
+    
+    enum class for_each_error {
+        NIL,
+        NO_PAYLOAD,
+    };
+    constexpr for_each_error for_each(auto &&callable, std::source_location location = std::source_location::current()) {
+        print_self("before for_each", location);
+        if(extent) assert(payload);
+        if(payload) assert(extent);
+        auto error = for_each_error::NIL;
+        if(!payload) { error = set_error(for_each_error, NO_PAYLOAD); }
+        for(core::size i = 0; i < extent; ++i) {
+            std::forward<decltype(callable)>(callable)(payload[i]);
+        }
+        print_self("after for_each", location);
+        return error;
+    }
+
+private:
+    void print_self(std::string_view message, std::source_location location) {
+#if 0
+        os.print("{}({}:{}) `{}`: {} => ", location.file_name(), location.line(), location.column(), location.function_name(), message.data());
+        os.print("payload = {}, extent = {}, constructed = {}\n", reinterpret_cast<void*>(payload), extent, constructed);
+#else
+        os.print("{}({}:{}) `{}`: {} => ", location.file_name(), location.line(), location.column(), location.function_name(), message.data());
+        os.print("[{}, {}, {}]\n", reinterpret_cast<void*>(payload), extent, constructed);
+#endif
+        os.flush();
+    }
+    
+    verbose_ptr(T *payload_, core::size extent_, bool constructed_, std::string_view filename): payload(payload_), extent(extent_), constructed(constructed_), os(fmt::output_file(filename.data())) {}
+
+    verbose_ptr(const verbose_ptr&) = default;
+    verbose_ptr(verbose_ptr&&) = default;
+
+
+    T *payload;
+    core::size extent;
+    bool constructed;
+    fmt::ostream os;
+};
+
+};
+
+void vptr_test() {
+    struct bad_allocator {
+        core::i32 *allocate(core::size) { return nullptr; }
+        void deallocate(core::i32*,core::size) {}
+    };
+    auto alloc = bad_allocator();
+    auto num = dev::verbose_ptr<core::i32>::make("logs/verpose_ptr_test.log", "making a verbose pointer");
+    num.allocate(alloc, 1);
+    num.construct_each(std::make_tuple(32));
+    num.destroy_each();
+    num.deallocate(alloc);
 }
 
 auto main() noexcept -> core::i32 {
@@ -504,9 +675,5 @@ auto main() noexcept -> core::i32 {
 #if 0
     pool_test2();
 #endif
-
-    for(core::size i = 0; i < 37; ++i) {
-        fmt::print("fib5({}) = {}\n", i, fib5(static_cast<core::i32>(i)));
-    }
-    storage.print_memory();
+    vptr_test();
 }

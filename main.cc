@@ -525,12 +525,14 @@ core::i32 fib5(core::i32 x) {
 
 namespace dev {
 
+static core::size log_counter = 0;
+
 template<typename T>
 struct verbose_ptr {
 private:
 #define set_error(type, error) (print_error_set_(#type, #error), type :: error)
     void print_error_set_(std::string_view type, std::string_view error, std::source_location location = std::source_location::current()) {
-        os.print("{}@{}; {}({}:{}) `{}`\n", type.data(), error.data(), location.file_name(), location.line(), location.column(), location.function_name());
+        os.print("[{}] {}@{}; {}({}:{}) `{}`\n", log_counter++, type.data(), error.data(), location.file_name(), location.line(), location.column(), location.function_name());
         os.flush();
     }
 public:
@@ -631,8 +633,24 @@ private:
         os.print("{}({}:{}) `{}`: {} => ", location.file_name(), location.line(), location.column(), location.function_name(), message.data());
         os.print("payload = {}, extent = {}, constructed = {}\n", reinterpret_cast<void*>(payload), extent, constructed);
 #else
-        os.print("{}({}:{}) `{}`: {} => ", location.file_name(), location.line(), location.column(), location.function_name(), message.data());
-        os.print("[{}, {}, {}]\n", reinterpret_cast<void*>(payload), extent, constructed);
+        os.print("[{}] {}({}:{}) `{}`: {} => ", log_counter++,location.file_name(), location.line(), location.column(), location.function_name(), message.data());
+        os.print("[{}, {}, {}]", reinterpret_cast<void*>(payload), extent, constructed);
+
+        if(payload && constructed) {
+            os.print(" =>");
+            for(core::size i = 0; i < extent; ++i) {
+                os.print(" <{}>", payload[i]);
+            }
+            os.print("\n");
+        } else if(payload && !constructed) {
+            os.print(" =>");
+            for(core::size i = 0; i < extent; ++i) {
+                os.print(" <?>");
+            }
+            os.print("\n");
+        } else {
+            os.print(" => nil\n");
+        }
 #endif
         os.flush();
     }
@@ -656,10 +674,17 @@ void vptr_test() {
         core::i32 *allocate(core::size) { return nullptr; }
         void deallocate(core::i32*,core::size) {}
     };
-    auto alloc = bad_allocator();
+    auto alloc = std::allocator<core::i32>();
     auto num = dev::verbose_ptr<core::i32>::make("logs/verpose_ptr_test.log", "making a verbose pointer");
-    num.allocate(alloc, 1);
+    if(auto error = num.allocate(alloc, 5); error == decltype(num)::allocate_error::NULLPTR_ON_ALLOCATION) {
+        fmt::print("nullptr on allocation!\n");
+    }
     num.construct_each(std::make_tuple(32));
+
+    num.for_each([](core::i32 &x) {
+        x *= x;
+    });
+
     num.destroy_each();
     num.deallocate(alloc);
 }
